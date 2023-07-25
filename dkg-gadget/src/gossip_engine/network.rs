@@ -40,6 +40,7 @@
 //! engine, and it is verified then it will be added to the Engine's internal stream of DKG
 //! messages, later the DKG Gadget will read this stream and process the DKG message.
 
+pub use crate::constants::network::*;
 use crate::{debug_logger::DebugLogger, metrics::Metrics, worker::HasLatestHeader, DKGKeystore};
 use codec::{Decode, Encode};
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
@@ -151,17 +152,6 @@ impl NetworkGossipEngineBuilder {
 		Ok((handler, controller))
 	}
 }
-
-/// Maximum number of known messages hashes to keep for a peer.
-const MAX_KNOWN_MESSAGES: usize = 4096;
-
-/// Maximum allowed size for a DKG Signed Message notification.
-const MAX_MESSAGE_SIZE: u64 = 16 * 1024 * 1024;
-
-/// Maximum number of duplicate messages that a single peer can send us.
-///
-/// This is to prevent a malicious peer from spamming us with messages.
-const MAX_DUPLICATED_MESSAGES_PER_PEER: usize = 8;
 
 #[allow(unused)]
 mod rep {

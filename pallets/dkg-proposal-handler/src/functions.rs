@@ -1,6 +1,6 @@
 use super::*;
 use dkg_runtime_primitives::handlers::decode_proposals::ProposalIdentifier;
-use sp_runtime::traits::{CheckedAdd, One};
+use sp_runtime::traits::{CheckedAdd, CheckedSub, One};
 
 impl<T: Config> Pallet<T> {
 	// *** API methods ***
@@ -301,5 +301,99 @@ impl<T: Config> Pallet<T> {
 	#[cfg(feature = "runtime-benchmarks")]
 	pub fn signed_proposals_len() -> usize {
 		SignedProposals::<T>::iter_keys().count()
+	}
+
+	pub fn on_idle_create_proposal_batches(mut remaining_weight: Weight) -> Weight {
+		// fetch all unsigned proposals
+		let unsigned_proposals: Vec<_> = UnsignedProposals::<T>::iter().collect();
+		let unsigned_proposals_len = unsigned_proposals.len() as u64;
+		remaining_weight =
+			remaining_weight.saturating_sub(T::DbWeight::get().reads(unsigned_proposals_len));
+
+		for (typed_chain_id, unsigned_proposals) in unsigned_proposals {
+			remaining_weight =
+				remaining_weight.saturating_sub(T::DbWeight::get().reads_writes(1, 3));
+
+			if remaining_weight.is_zero() {
+				break
+			}
+
+			let batch_id_res = Self::generate_next_batch_id();
+
+			if batch_id_res.is_err() {
+				log::debug!(
+					target: "runtime::dkg_proposal_handler",
+					"on_idle: Cannot generate next batch ID: {:?}",
+					batch_id_res,
+				);
+				return remaining_weight
+			}
+
+			let batch_id = batch_id_res.expect("checked above");
+
+			// create new proposal batch
+			let proposal_batch = StoredUnsignedProposalBatchOf::<T> {
+				batch_id,
+				proposals: unsigned_proposals,
+				timestamp: <frame_system::Pallet<T>>::block_number(),
+			};
+			// push the batch to unsigned proposal queue
+			UnsignedProposalQueue::<T>::insert(typed_chain_id, batch_id, proposal_batch);
+
+			// remove the batch from the unsigned proposal list
+			UnsignedProposals::<T>::remove(typed_chain_id);
+		}
+
+		remaining_weight
+	}
+
+	pub fn on_idle_remove_expired_batches(
+		now: T::BlockNumber,
+		mut remaining_weight: Weight,
+	) -> Weight {
+		use dkg_runtime_primitives::DKGPayloadKey::RefreshProposal;
+
+		// early return if we dont have enough weight to perform a read
+		if remaining_weight.is_zero() {
+			return remaining_weight
+		}
+
+		// fetch all unsigned proposals
+		let unsigned_proposals: Vec<_> = UnsignedProposalQueue::<T>::iter().collect();
+		let unsigned_proposals_len = unsigned_proposals.len() as u64;
+		remaining_weight =
+			remaining_weight.saturating_sub(T::DbWeight::get().reads(unsigned_proposals_len));
+
+		// filter out proposals to delete
+		let unsigned_proposal_past_expiry = unsigned_proposals.into_iter().filter(
+			|(_, _, StoredUnsignedProposalBatchOf::<T> { proposals, timestamp, .. })| {
+				let key = proposals.first().expect("cannot be empty").key;
+
+				// Skip expiration for keygen related proposals
+				if let RefreshProposal(_) = key {
+					return false
+				}
+
+				let time_passed = now.checked_sub(timestamp).unwrap_or_default();
+				time_passed > T::UnsignedProposalExpiry::get()
+			},
+		);
+
+		// remove unsigned proposal until we run out of weight
+		for expired_proposal in unsigned_proposal_past_expiry {
+			remaining_weight =
+				remaining_weight.saturating_sub(T::DbWeight::get().writes(One::one()));
+
+			if remaining_weight.is_zero() {
+				break
+			}
+			Self::deposit_event(Event::<T>::ProposalBatchExpired {
+				target_chain: expired_proposal.0,
+				batch_id: expired_proposal.1,
+			});
+			UnsignedProposalQueue::<T>::remove(expired_proposal.0, expired_proposal.1);
+		}
+
+		remaining_weight
 	}
 }

@@ -149,6 +149,7 @@ pub(crate) fn gossip_public_key<GE>(
 			recipient_id: None,
 			session_id: msg.session_id,
 			payload,
+			ssid: 0,
 		};
 		let encoded_dkg_message = message.encode();
 

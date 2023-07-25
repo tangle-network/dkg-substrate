@@ -1,10 +1,10 @@
 #![allow(clippy::unwrap_used)]
 use crate::{debug, error, info, trace, warn};
 use lazy_static::lazy_static;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use serde::Serialize;
 use sp_core::{bytes::to_hex, hashing::sha2_256};
-use std::{collections::HashMap, fmt::Debug, io::Write, sync::Arc, time::Instant};
+use std::{collections::HashMap, fmt::Debug, io::Write, path::PathBuf, sync::Arc, time::Instant};
 
 #[derive(Clone, Debug)]
 pub struct DebugLogger {
@@ -15,6 +15,7 @@ pub struct DebugLogger {
 	events_file_handle_signing: Arc<RwLock<Option<std::fs::File>>>,
 	events_file_handle_voting: Arc<RwLock<Option<std::fs::File>>>,
 	checkpoints_enabled: bool,
+	paths: Arc<Mutex<Vec<PathBuf>>>,
 }
 
 struct Checkpoint {
@@ -37,6 +38,7 @@ pub enum AsyncProtocolType {
 enum MessageType {
 	Default(String),
 	Event(RoundsEvent),
+	Clear,
 }
 
 lazy_static::lazy_static! {
@@ -162,10 +164,7 @@ type EventFiles =
 	(Option<std::fs::File>, Option<std::fs::File>, Option<std::fs::File>, Option<std::fs::File>);
 
 impl DebugLogger {
-	pub fn new<T: ToString>(
-		identifier: T,
-		file: Option<std::path::PathBuf>,
-	) -> std::io::Result<Self> {
+	pub fn new<T: ToString>(identifier: T, file: Option<PathBuf>) -> std::io::Result<Self> {
 		// use a channel for sending file I/O requests to a dedicated thread to avoid blocking the
 		// DKG workers
 
@@ -188,8 +187,11 @@ impl DebugLogger {
 			}
 		}
 
+		let paths = Arc::new(Mutex::new(Vec::new()));
+		let paths_task = paths.clone();
+
 		let (file, events_file_keygen, events_file_signing, events_file_voting) =
-			Self::get_files(file)?;
+			Self::get_files(&paths, file)?;
 
 		let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 		let file_handle = Arc::new(RwLock::new(file));
@@ -229,6 +231,14 @@ impl DebugLogger {
 								}
 							},
 						},
+						MessageType::Clear => {
+							let lock = paths_task.lock();
+							for path in &*lock {
+								if let Err(err) = std::fs::remove_file(path) {
+									error!(target: "dkg", "Failed to remove file: {err}");
+								}
+							}
+						},
 					}
 				}
 			});
@@ -242,17 +252,23 @@ impl DebugLogger {
 			events_file_handle_signing,
 			events_file_handle_voting,
 			checkpoints_enabled,
+			paths,
 		})
 	}
 
-	fn get_files(base_output: Option<std::path::PathBuf>) -> std::io::Result<EventFiles> {
-		if let Some(file_path) = &base_output {
-			let file = std::fs::File::create(file_path)?;
-			let events_file = std::fs::File::create(format!("{}.keygen.log", file_path.display()))?;
-			let events_file_signing =
-				std::fs::File::create(format!("{}.signing.log", file_path.display()))?;
-			let events_file_voting =
-				std::fs::File::create(format!("{}.voting.log", file_path.display()))?;
+	fn get_files(
+		paths: &Arc<Mutex<Vec<PathBuf>>>,
+		base_output: Option<PathBuf>,
+	) -> std::io::Result<EventFiles> {
+		if let Some(file_path) = base_output {
+			let file = std::fs::File::create(&file_path)?;
+			let keygen_path = PathBuf::from(format!("{}.keygen.log", file_path.display()));
+			let signing_path = PathBuf::from(format!("{}.signing.log", file_path.display()));
+			let voting_path = PathBuf::from(format!("{}.voting.log", file_path.display()));
+			let events_file = std::fs::File::create(&keygen_path)?;
+			let events_file_signing = std::fs::File::create(&signing_path)?;
+			let events_file_voting = std::fs::File::create(&voting_path)?;
+			*paths.lock() = vec![file_path, keygen_path, signing_path, voting_path];
 			Ok((Some(file), Some(events_file), Some(events_file_signing), Some(events_file_voting)))
 		} else {
 			Ok((None, None, None, None))
@@ -268,8 +284,8 @@ impl DebugLogger {
 		*self.identifier.write() = id;
 	}
 
-	pub fn set_output(&self, file: Option<std::path::PathBuf>) -> std::io::Result<()> {
-		let (file, event_file, signing_file, voting_file) = Self::get_files(file)?;
+	pub fn set_output(&self, file: Option<PathBuf>) -> std::io::Result<()> {
+		let (file, event_file, signing_file, voting_file) = Self::get_files(&self.paths, file)?;
 		*self.file_handle.write() = file;
 		*self.events_file_handle_keygen.write() = event_file;
 		*self.events_file_handle_signing.write() = signing_file;
@@ -422,6 +438,13 @@ impl DebugLogger {
 		if self.checkpoints_enabled {
 			let hash = raw_message_to_hash(payload);
 			CHECKPOINTS.write().remove(&hash);
+		}
+	}
+
+	/// Completely deletes all local logs associated with this program
+	pub fn clear_local_logs(&self) {
+		if let Err(err) = self.to_file_io.send(MessageType::Clear) {
+			error!(target: "dkg_gadget", "failed to send event message to file: {err:?}");
 		}
 	}
 }

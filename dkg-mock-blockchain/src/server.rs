@@ -33,6 +33,7 @@ pub struct MockBlockchain<T: Clone> {
 	orchestrator_rx: Arc<Mutex<Option<mpsc::UnboundedReceiver<ClientToOrchestratorEvent>>>>,
 	orchestrator_state: Arc<Atomic<OrchestratorState>>,
 	blocks_per_session: Arc<u64>,
+	max_signing_sets_per_proposal: Arc<usize>,
 	blockchain: T,
 	logger: DebugLogger,
 }
@@ -87,6 +88,7 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 		blockchain: T,
 		logger: DebugLogger,
 		blocks_per_session: u64,
+		max_signing_sets_per_proposal: usize,
 	) -> std::io::Result<Self> {
 		let listener = TcpListener::bind(&config.bind).await?;
 		let clients = Arc::new(RwLock::new(HashMap::new()));
@@ -103,6 +105,7 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 			blockchain,
 			logger,
 			blocks_per_session: Arc::new(blocks_per_session),
+			max_signing_sets_per_proposal: Arc::new(max_signing_sets_per_proposal),
 		})
 	}
 
@@ -532,11 +535,13 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 				IntraTestPhase::Signing { trace_id, queued_unsigned_proposals, .. } => {
 					if let Some(unsigned_propos) = queued_unsigned_proposals.clone() {
 						for _ in 0..unsigned_propos.len() {
-							client
-								.outstanding_tasks_signing
-								.entry(*trace_id)
-								.or_default()
-								.push(next_case.clone());
+							for _ in 0..*self.max_signing_sets_per_proposal {
+								client
+									.outstanding_tasks_signing
+									.entry(*trace_id)
+									.or_default()
+									.push(next_case.clone());
+							}
 						}
 						self.blockchain.set_should_execute_keygen(false);
 						self.blockchain.set_unsigned_proposals(unsigned_propos);

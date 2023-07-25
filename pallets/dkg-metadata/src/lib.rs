@@ -103,7 +103,8 @@ use dkg_runtime_primitives::{
 	traits::{GetDKGPublicKey, OnAuthoritySetChangeHandler},
 	utils::{ecdsa, to_slice_33, verify_signer_from_set_ecdsa},
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthorityIndex, AuthoritySet,
-	ConsensusLog, MisbehaviourType, ProposalHandlerTrait, RefreshProposal, DKG_ENGINE_ID,
+	ConsensusLog, MisbehaviourType, ProposalHandlerTrait, ProposalNonce, RefreshProposal,
+	DKG_ENGINE_ID,
 };
 use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
@@ -706,11 +707,37 @@ pub mod pallet {
 		/// Next public key submitted
 		NextPublicKeySubmitted { compressed_pub_key: Vec<u8> },
 		/// Next public key signature submitted
-		NextPublicKeySignatureSubmitted { signature: Vec<u8>, refresh_proposal: RefreshProposal },
+		NextPublicKeySignatureSubmitted {
+			/// The merkle root of the voters (validators)
+			voter_merkle_root: [u8; 32],
+			/// The session length in milliseconds
+			session_length: u64,
+			/// The number of voters
+			voter_count: u32,
+			/// The refresh nonce for the rotation
+			nonce: ProposalNonce,
+			/// The public key of the governor
+			pub_key: Vec<u8>,
+			/// The Signature of the data above, concatenated.
+			signature: Vec<u8>,
+		},
 		/// Current Public Key Changed.
 		PublicKeyChanged { compressed_pub_key: Vec<u8> },
 		/// Current Public Key Signature Changed.
-		PublicKeySignatureChanged { signature: Vec<u8>, refresh_proposal: RefreshProposal },
+		PublicKeySignatureChanged {
+			/// The merkle root of the voters (validators)
+			voter_merkle_root: [u8; 32],
+			/// The session length in milliseconds
+			session_length: u64,
+			/// The number of voters
+			voter_count: u32,
+			/// The refresh nonce for the rotation
+			nonce: ProposalNonce,
+			/// The public key of the governor
+			pub_key: Vec<u8>,
+			/// The Signature of the data above, concatenated.
+			signature: Vec<u8>,
+		},
 		/// Misbehaviour reports submitted
 		MisbehaviourReportsSubmitted {
 			misbehaviour_type: MisbehaviourType,
@@ -1846,10 +1873,14 @@ impl<T: Config> Pallet<T> {
 			});
 
 			// At this point the refresh proposal should ALWAYS exist
-			if let Some(curr_prop) = CurrentRefreshProposal::<T>::get() {
+			if let Some(curr) = CurrentRefreshProposal::<T>::get() {
 				Self::deposit_event(Event::PublicKeySignatureChanged {
+					voter_merkle_root: curr.voter_merkle_root,
+					session_length: curr.session_length,
+					voter_count: curr.voter_count,
+					nonce: curr.nonce,
+					pub_key: curr.pub_key,
 					signature: next_pub_key_signature.into(),
-					refresh_proposal: curr_prop,
 				});
 
 				CurrentRefreshProposal::<T>::kill();
@@ -2426,8 +2457,12 @@ impl<T: Config> OnSignedProposal<T::MaxProposalLength> for Pallet<T> {
 
 			// Emit the event
 			Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
-				refresh_proposal: curr,
 				signature: proposal.signature().unwrap_or_default(),
+				voter_merkle_root: curr.voter_merkle_root,
+				session_length: curr.session_length,
+				voter_count: curr.voter_count,
+				nonce: curr.nonce,
+				pub_key: curr.pub_key,
 			});
 		};
 

@@ -2,6 +2,7 @@
 
 use crate::{
 	async_protocols::{remote::AsyncProtocolRemote, KeygenPartyId, KeygenRound},
+	constants::keygen_manager::*,
 	dkg_modules::KeygenProtocolSetupParameters,
 	gossip_engine::GossipEngineIface,
 	signing_manager::work_manager::{JobMetadata, PollMethod, WorkManager},
@@ -67,11 +68,6 @@ pub enum KeygenState {
 	KeygenCompleted { session_completed: u64 },
 	Failed { session_id: u64 },
 }
-
-/// only 1 task at a time may run for keygen
-const MAX_RUNNING_TASKS: usize = 1;
-/// There should never be any job enqueueing for keygen
-const MAX_ENQUEUED_TASKS: usize = 0;
 
 impl<B, BE, C, GE> KeygenManager<B, BE, C, GE>
 where

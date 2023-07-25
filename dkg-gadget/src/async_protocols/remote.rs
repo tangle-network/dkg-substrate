@@ -37,6 +37,8 @@ pub struct AsyncProtocolRemote<C> {
 	pub(crate) current_round_blame_tx: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
 	pub(crate) session_id: SessionId,
 	pub(crate) associated_block_id: u64,
+	/// The signing set index. For keygen, this is always 0
+	pub(crate) ssid: u8,
 	pub(crate) logger: DebugLogger,
 	status_history: Arc<Mutex<Vec<MetaHandlerStatus>>>,
 }
@@ -74,6 +76,7 @@ impl<C: Clone> Clone for AsyncProtocolRemote<C> {
 			logger: self.logger.clone(),
 			status_history: self.status_history.clone(),
 			associated_block_id: self.associated_block_id,
+			ssid: self.ssid,
 		}
 	}
 }
@@ -101,6 +104,7 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 		session_id: SessionId,
 		logger: DebugLogger,
 		associated_block_id: u64,
+		ssid: u8,
 	) -> Self {
 		let (stop_tx, stop_rx) = tokio::sync::mpsc::unbounded_channel();
 		let (tx_keygen_signing, rx_keygen_signing) = tokio::sync::mpsc::unbounded_channel();
@@ -112,31 +116,6 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 
 		let status = Arc::new(Atomic::new(MetaHandlerStatus::Beginning));
 		let status_history = Arc::new(Mutex::new(vec![MetaHandlerStatus::Beginning]));
-
-		// let status_debug = status.clone();
-		// let status_history_debug = status_history.clone();
-		// let logger_debug = logger.clone();
-
-		// The purpose of this task is to log the status of the meta handler
-		// in the case that it is stalled/not-progressing. This is useful for debugging.
-		// tokio::task::spawn(async move {
-		// 	loop {
-		// 		tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-		// 		let status = status_debug.load(Ordering::Relaxed);
-		// 		if [MetaHandlerStatus::Terminated, MetaHandlerStatus::Complete].contains(&status) {
-		// 			break
-		// 		}
-		// 		let status_history = status_history_debug.lock();
-
-		// 		if status == MetaHandlerStatus::Beginning && status_history.len() == 1 {
-		// 			continue
-		// 		}
-
-		// 		logger_debug.debug(format!(
-		// 			"AsyncProtocolRemote status: {status:?} ||||| history: {status_history:?} |||||
-		// session_id: {session_id:?}", 		));
-		// 	}
-		// });
 
 		Self {
 			status,
@@ -156,6 +135,7 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 			is_primary_remote: false,
 			session_id,
 			associated_block_id,
+			ssid,
 		}
 	}
 

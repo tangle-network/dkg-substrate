@@ -8,6 +8,7 @@ use dkg_primitives::{
 use self::work_manager::WorkManager;
 use crate::{
 	async_protocols::KeygenPartyId,
+	constants::signing_manager::*,
 	dkg_modules::SigningProtocolSetupParameters,
 	gossip_engine::GossipEngineIface,
 	metric_inc,
@@ -21,7 +22,6 @@ use dkg_runtime_primitives::crypto::Public;
 use sp_api::HeaderT;
 use std::sync::atomic::{AtomicBool, Ordering};
 use webb_proposals::TypedChainId;
-
 /// For balancing the amount of work done by each node
 pub mod work_manager;
 
@@ -50,12 +50,6 @@ impl<B: Block, BE, C, GE> Clone for SigningManager<B, BE, C, GE> {
 		Self { work_manager: self.work_manager.clone(), _pd: self._pd, lock: self.lock.clone() }
 	}
 }
-
-// the maximum number of tasks that the work manager tries to assign
-const MAX_RUNNING_TASKS: usize = 4;
-const MAX_ENQUEUED_TASKS: usize = 20;
-// How often to poll the jobs to check completion status
-const JOB_POLL_INTERVAL_IN_MILLISECONDS: u64 = 500;
 
 impl<B, BE, C, GE> SigningManager<B, BE, C, GE>
 where
@@ -200,65 +194,70 @@ where
 			   if we are not, we continue the loop.
 			*/
 			let unsigned_proposal_bytes = batch.encode();
-			let concat_data = dkg_pub_key
-				.clone()
-				.into_iter()
-				//.chain(at.encode())
-				.chain(unsigned_proposal_bytes)
-				.collect::<Vec<u8>>();
-			let seed = sp_core::keccak_256(&concat_data);
 			let unsigned_proposal_hash = batch.hash().expect("unable to hash proposal");
 
-			let maybe_set = self
-				.generate_signers(&seed, threshold, best_authorities.clone(), dkg_worker)
-				.ok();
-			if let Some(signing_set) = maybe_set {
-				// if we are in the set, send to work manager
-				if signing_set.contains(&party_i) {
-					dkg_worker.logger.info(format!(
-						"🕸️  Session Id {:?} | {}-out-of-{} signers: ({:?})",
-						session_id,
-						threshold,
-						best_authorities.len(),
-						signing_set,
-					));
+			for ssid in 0..MAX_POTENTIAL_SIGNING_SETS_PER_PROPOSAL {
+				let concat_data = dkg_pub_key
+					.clone()
+					.into_iter()
+					.chain(unsigned_proposal_bytes.clone())
+					.chain(ssid.encode())
+					.collect::<Vec<u8>>();
+				let seed = sp_core::keccak_256(&concat_data);
 
-					let params = SigningProtocolSetupParameters::MpEcdsa {
-						best_authorities: best_authorities.clone(),
-						authority_public_key: authority_public_key.clone(),
-						party_i,
-						session_id,
-						threshold,
-						stage: ProtoStageType::Signing { unsigned_proposal_hash },
-						unsigned_proposal_batch: batch,
-						signing_set,
-						associated_block_id: *header.number(),
-					};
+				let maybe_set = self
+					.generate_signers(&seed, threshold, best_authorities.clone(), dkg_worker)
+					.ok();
+				if let Some(signing_set) = maybe_set {
+					// if we are in the set, send to work manager
+					if signing_set.contains(&party_i) {
+						dkg_worker.logger.info(format!(
+							"🕸️  Session Id {:?} | SSID {} | {}-out-of-{} signers: ({:?})",
+							session_id,
+							ssid,
+							threshold,
+							best_authorities.len(),
+							signing_set,
+						));
 
-					let signing_protocol = dkg_worker
-						.dkg_modules
-						.get_signing_protocol(&params)
-						.expect("Standard signing protocol should exist");
-					match signing_protocol.initialize_signing_protocol(params).await {
-						Ok((handle, task)) => {
-							// Send task to the work manager. Force start if the type chain ID is
-							// None, implying this is a proposal needed for rotating sessions and
-							// thus a priority
-							let force_start = typed_chain_id == TypedChainId::None;
-							self.work_manager.push_task(
-								unsigned_proposal_hash,
-								force_start,
-								handle,
-								task,
-							)?;
-						},
-						Err(err) => {
-							dkg_worker
-								.logger
-								.error(format!("Error creating signing protocol: {:?}", &err));
-							dkg_worker.handle_dkg_error(err.clone()).await;
-							return Err(err)
-						},
+						let params = SigningProtocolSetupParameters::MpEcdsa {
+							best_authorities: best_authorities.clone(),
+							authority_public_key: authority_public_key.clone(),
+							party_i,
+							session_id,
+							threshold,
+							stage: ProtoStageType::Signing { unsigned_proposal_hash },
+							unsigned_proposal_batch: batch.clone(),
+							signing_set,
+							associated_block_id: *header.number(),
+							ssid,
+						};
+
+						let signing_protocol = dkg_worker
+							.dkg_modules
+							.get_signing_protocol(&params)
+							.expect("Standard signing protocol should exist");
+						match signing_protocol.initialize_signing_protocol(params).await {
+							Ok((handle, task)) => {
+								// Send task to the work manager. Force start if the type chain ID
+								// is None, implying this is a proposal needed for rotating sessions
+								// and thus a priority
+								let force_start = typed_chain_id == TypedChainId::None;
+								self.work_manager.push_task(
+									unsigned_proposal_hash,
+									force_start,
+									handle,
+									task,
+								)?;
+							},
+							Err(err) => {
+								dkg_worker
+									.logger
+									.error(format!("Error creating signing protocol: {:?}", &err));
+								dkg_worker.handle_dkg_error(err.clone()).await;
+								return Err(err)
+							},
+						}
 					}
 				}
 			}
