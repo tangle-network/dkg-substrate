@@ -143,7 +143,11 @@ where
 			self.logger.clear_checkpoint_for_message(&msg);
 		}
 
-		self.logger.trace(format!("SM After: {:?}", &self.sm));
+		// Get the round blame to update round blame
+		let round_blame = self.round_blame();
+
+		self.logger
+			.trace(format!("SM After: {:?} || round_blame: {:?}", &self.sm, round_blame));
 
 		result
 	}

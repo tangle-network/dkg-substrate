@@ -315,7 +315,7 @@ where
 			return
 		}
 
-		if matches!(state, KeygenState::KeygenCompleted { .. }) {
+		if matches!(state, KeygenState::KeygenCompleted { .. } | KeygenState::Failed { .. }) {
 			// We maybe need to start a keygen for session `session_id`:
 			return self
 				.maybe_start_keygen_for_stage(

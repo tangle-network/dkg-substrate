@@ -68,7 +68,7 @@ use crate::{
 	keystore::DKGKeystore,
 	metric_inc, metric_set,
 	metrics::Metrics,
-	utils::find_authorities_change,
+	utils::{find_authorities_change, generate_authority_mapping},
 	Client,
 };
 
@@ -330,6 +330,8 @@ where
 		let now = self.get_latest_block_number();
 		let associated_block_id: u64 = associated_block.saturated_into();
 
+		let authority_mapping = generate_authority_mapping(&best_authorities, stage);
+
 		let status_handle = AsyncProtocolRemote::new(
 			now,
 			session_id,
@@ -337,6 +339,7 @@ where
 			associated_block_id,
 			ssid,
 			stage,
+			authority_mapping,
 		);
 		// Fetch the active key. This requires rotating the key to have happened with
 		// full certainty in order to ensure the right key is being used to make signatures.
@@ -791,38 +794,26 @@ where
 	pub async fn handle_dkg_error(&self, dkg_error: DKGError) {
 		self.logger.error(format!("Received error: {dkg_error:?}"));
 		metric_inc!(self, dkg_error_counter);
-		let authorities: Vec<Public> =
-			self.best_authorities.read().iter().map(|x| x.1.clone()).collect();
 
-		let (bad_actors, session_id) = match dkg_error {
-			DKGError::KeygenMisbehaviour { ref bad_actors, .. } => {
+		let (offenders, session_id) = match dkg_error {
+			DKGError::KeygenMisbehaviour { ref bad_actors, session_id, .. } => {
 				metric_inc!(self, dkg_keygen_misbehaviour_error);
-				(bad_actors.clone(), 0)
+				(bad_actors.clone(), session_id)
 			},
 			DKGError::KeygenTimeout { ref bad_actors, session_id, .. } => {
 				metric_inc!(self, dkg_keygen_timeout_error);
 				(bad_actors.clone(), session_id)
 			},
 			// Todo: Handle Signing Timeout as a separate case
-			DKGError::SignMisbehaviour { ref bad_actors, .. } => {
+			DKGError::SignMisbehaviour { ref bad_actors, session_id, .. } => {
 				metric_inc!(self, dkg_sign_misbehaviour_error);
-				(bad_actors.clone(), 0)
+				(bad_actors.clone(), session_id)
 			},
 			_ => Default::default(),
 		};
 
 		self.logger
-			.error(format!("Bad Actors : {bad_actors:?}, Session Id : {session_id:?}"));
-
-		let mut offenders: Vec<AuthorityId> = Vec::new();
-		for bad_actor in bad_actors {
-			let bad_actor = bad_actor;
-			if bad_actor > 0 && bad_actor <= authorities.len() {
-				if let Some(offender) = authorities.get(bad_actor - 1) {
-					offenders.push(offender.clone());
-				}
-			}
-		}
+			.error(format!("Bad Actors : {offenders:?}, Session Id : {session_id:?}"));
 
 		for offender in offenders {
 			match dkg_error {

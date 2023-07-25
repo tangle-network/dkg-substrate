@@ -13,26 +13,38 @@
 // limitations under the License.
 
 use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
-use dkg_runtime_primitives::{gossip_messages::DKGVoteMessage, StoredUnsignedProposalBatch};
+use dkg_runtime_primitives::{
+	gossip_messages::DKGVoteMessage, SessionId, StoredUnsignedProposalBatch,
+};
 use futures::StreamExt;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 	keygen::LocalKey,
 	sign::{CompletedOfflineStage, OfflineStage, PartialSignature, SignManual},
 };
-use std::{collections::HashSet, fmt::Debug, sync::Arc};
+use std::{
+	collections::{HashMap, HashSet},
+	fmt::Debug,
+	sync::Arc,
+};
 
-use crate::async_protocols::{
-	blockchain_interface::BlockchainInterface,
-	incoming::IncomingAsyncProtocolWrapper,
-	new_inner,
-	remote::{MetaHandlerStatus, ShutdownReason},
-	state_machine::StateMachineHandler,
-	AsyncProtocolParameters, BatchKey, GenericAsyncHandler, KeygenPartyId, OfflinePartyId,
-	ProtocolType, Threshold,
+use crate::{
+	async_protocols::{
+		blockchain_interface::BlockchainInterface,
+		incoming::IncomingAsyncProtocolWrapper,
+		new_inner,
+		remote::{MetaHandlerStatus, ShutdownReason},
+		state_machine::StateMachineHandler,
+		AsyncProtocolParameters, BatchKey, GenericAsyncHandler, KeygenPartyId, OfflinePartyId,
+		ProtocolType, Threshold,
+	},
+	utils::bad_actors_to_authorities,
 };
 use dkg_logging::debug_logger::RoundsEventType;
 use dkg_primitives::types::{DKGError, DKGMessage, NetworkMsgPayload, SignedDKGMessage};
-use dkg_runtime_primitives::{crypto::Public, MaxAuthorities};
+use dkg_runtime_primitives::{
+	crypto::{AuthorityId, Public},
+	MaxAuthorities,
+};
 use futures::FutureExt;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 	party_i::verify,
@@ -57,6 +69,9 @@ where
 	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
 		assert!(threshold + 1 == s_l.len() as u16, "Signing set must be of size threshold + 1");
 		let status_handle = params.handle.clone();
+		let session_id = params.session_id;
+		let mapping = status_handle.index_to_authority_mapping.clone();
+
 		let mut stop_rx =
 			status_handle.stop_rx.lock().take().ok_or_else(|| DKGError::GenericError {
 				reason: "execute called twice with the same AsyncProtocol Parameters".to_string(),
@@ -69,6 +84,7 @@ where
 
 		let logger0 = params.logger.clone();
 		let logger2 = params.logger.clone();
+		let bad_actors_rx = params.handle.current_round_blame.clone();
 
 		let protocol = async move {
 			let maybe_local_key = params.local_key.clone();
@@ -133,7 +149,13 @@ where
 						if res1 == ShutdownReason::DropCode {
 							Ok(())
 						} else {
-							Err(DKGError::GenericError { reason: "Signing has stalled".into() })
+							let bad_actors = bad_actors_rx.borrow().blamed_parties.clone();
+							let bad_actors = bad_actors_to_authorities(bad_actors, &mapping);
+							Err(DKGError::SignMisbehaviour {
+								reason: "Signing has stalled!".to_string(),
+								session_id,
+								bad_actors
+							})
 						}
 					} else {
 						Ok(())
@@ -197,6 +219,9 @@ where
 	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
 		let protocol = Box::pin(async move {
 			let unsigned_proposal_hash = unsigned_proposal_batch.hash().expect("Should not fail");
+			let session_id = params.session_id;
+			let mapping = params.handle.index_to_authority_mapping.clone();
+
 			let ty = ProtocolType::Voting {
 				offline_stage: Arc::new(completed_offline_stage.clone()),
 				unsigned_proposal_batch: Arc::new(unsigned_proposal_batch.clone()),
@@ -227,8 +252,9 @@ where
 			let offline_stage_pub_key = &completed_offline_stage.public_key().clone();
 
 			let (signing, partial_signature) =
-				SignManual::new(message.clone(), completed_offline_stage)
-					.map_err(|err| Self::convert_mpc_sign_error_to_dkg_error_signing(err))?;
+				SignManual::new(message.clone(), completed_offline_stage).map_err(|err| {
+					Self::convert_mpc_sign_error_to_dkg_error_signing(err, session_id, &mapping)
+				})?;
 
 			let partial_sig_bytes = serde_json::to_vec(&partial_signature).map_err(|_| {
 				DKGError::GenericError { reason: "Partial signature is invalid".to_string() }
@@ -345,9 +371,9 @@ where
 			}
 
 			params.logger.info_signing("RD1");
-			let signature = signing
-				.complete(&sigs)
-				.map_err(|err| Self::convert_mpc_sign_error_to_dkg_error_signing(err))?;
+			let signature = signing.complete(&sigs).map_err(|err| {
+				Self::convert_mpc_sign_error_to_dkg_error_signing(err, session_id, &mapping)
+			})?;
 
 			params.logger.info_signing("RD2");
 			verify(&signature, offline_stage_pub_key, &message).map_err(|err| DKGError::Vote {
@@ -376,35 +402,71 @@ where
 	/// contain them
 	fn convert_mpc_sign_error_to_dkg_error_signing(
 		error: multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::SignError,
+		session_id: SessionId,
+		mapping: &Arc<HashMap<usize, AuthorityId>>,
 	) -> DKGError {
 		use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::ProceedError::*;
 		match error {
-			LocalSigning(Round1(e)) =>
-				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
-			CompleteSigning(Round1(e)) =>
-				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+			LocalSigning(Round1(e)) => DKGError::SignMisbehaviour {
+				reason: e.error_type,
+				session_id,
+				bad_actors: bad_actors_to_authorities(e.bad_actors, mapping),
+			},
+			CompleteSigning(Round1(e)) => DKGError::SignMisbehaviour {
+				reason: e.error_type,
+				session_id,
+				bad_actors: bad_actors_to_authorities(e.bad_actors, mapping),
+			},
 
-			LocalSigning(Round2Stage4(e)) =>
-				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
-			CompleteSigning(Round2Stage4(e)) =>
-				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+			LocalSigning(Round2Stage4(e)) => DKGError::SignMisbehaviour {
+				reason: e.error_type,
+				session_id,
+				bad_actors: bad_actors_to_authorities(e.bad_actors, mapping),
+			},
+			CompleteSigning(Round2Stage4(e)) => DKGError::SignMisbehaviour {
+				reason: e.error_type,
+				session_id,
+				bad_actors: bad_actors_to_authorities(e.bad_actors, mapping),
+			},
 
-			LocalSigning(Round3(e)) =>
-				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
-			CompleteSigning(Round3(e)) =>
-				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+			LocalSigning(Round3(e)) => DKGError::SignMisbehaviour {
+				reason: e.error_type,
+				session_id,
+				bad_actors: bad_actors_to_authorities(e.bad_actors, mapping),
+			},
+			CompleteSigning(Round3(e)) => DKGError::SignMisbehaviour {
+				reason: e.error_type,
+				session_id,
+				bad_actors: bad_actors_to_authorities(e.bad_actors, mapping),
+			},
 
-			LocalSigning(Round5(e)) =>
-				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
-			CompleteSigning(Round5(e)) =>
-				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+			LocalSigning(Round5(e)) => DKGError::SignMisbehaviour {
+				reason: e.error_type,
+				session_id,
+				bad_actors: bad_actors_to_authorities(e.bad_actors, mapping),
+			},
+			CompleteSigning(Round5(e)) => DKGError::SignMisbehaviour {
+				reason: e.error_type,
+				session_id,
+				bad_actors: bad_actors_to_authorities(e.bad_actors, mapping),
+			},
 
-			LocalSigning(Round6VerifyProof(e)) =>
-				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
-			CompleteSigning(Round6VerifyProof(e)) =>
-				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+			LocalSigning(Round6VerifyProof(e)) => DKGError::SignMisbehaviour {
+				reason: e.error_type,
+				session_id,
+				bad_actors: bad_actors_to_authorities(e.bad_actors, mapping),
+			},
+			CompleteSigning(Round6VerifyProof(e)) => DKGError::SignMisbehaviour {
+				reason: e.error_type,
+				session_id,
+				bad_actors: bad_actors_to_authorities(e.bad_actors, mapping),
+			},
 
-			_ => DKGError::SignMisbehaviour { reason: error.to_string(), bad_actors: vec![] },
+			_ => DKGError::SignMisbehaviour {
+				reason: error.to_string(),
+				session_id,
+				bad_actors: vec![],
+			},
 		}
 	}
 }
