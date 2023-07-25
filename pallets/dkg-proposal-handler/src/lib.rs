@@ -631,7 +631,7 @@ pub mod pallet {
 				return Err(Error::<T>::ProposalExistsAndIsValid.into())
 			}
 		}
-		
+
 		#[pallet::weight(<T as Config>::WeightInfo::force_submit_unsigned_proposal())]
 		#[pallet::call_index(3)]
 		pub fn force_remove_unsigned_proposal_batch(
