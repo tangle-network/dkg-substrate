@@ -538,7 +538,7 @@ pub mod pallet {
 			}
 		}
 
-		#[pallet::weight(<T as Config>::WeightInfo::submit_signed_proposals(signed_data.len() as u32))]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_signed_proposals(signed_data.proposals.len() as u32))]
 		#[pallet::call_index(2)]
 		pub fn submit_dkg_signing_offence(
 			origin: OriginFor<T>,
