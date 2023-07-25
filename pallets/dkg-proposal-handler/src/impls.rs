@@ -46,25 +46,10 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			id.key,
 		);
 
-		let does_proposal_exist_in_queue =
-			UnsignedProposalQueue::<T>::contains_key(id.typed_chain_id, prop.batch_id);
-
-		if !does_proposal_exist_in_queue {
-			let session_index = T::ValidatorSet::session_index();
-			let dkg_offenders = pallet_dkg_metadata::Pallet::best_authorities().to_vec();
-			// we report an offence against the current DKG authorities
-			let offence = DKGMisbehaviourOffence {
-				offence: DKGMisbehaviorOffenceType::SignedProposalNotInQueue,
-				session_index,
-				validator_set_count: offenders.len() as u32,
-				offenders,
-			};
-			if let Err(e) = T::ReportOffences::report_offence(vec![], offence) {
-				sp_runtime::print(e);
-			}
-
-			return Err(Error::<T>::ProposalDoesNotExists.into())
-		}
+		ensure!(
+			UnsignedProposalQueue::<T>::contains_key(id.typed_chain_id, prop.batch_id),
+			Error::<T>::ProposalDoesNotExists
+		);
 
 		// Log that proposal exist in the unsigned queue
 		log::debug!(

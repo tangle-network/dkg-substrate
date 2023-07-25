@@ -23,6 +23,7 @@ use frame_support::{parameter_types, traits::Everything, BoundedVec, PalletId};
 use frame_system as system;
 use frame_system::EnsureRoot;
 use pallet_dkg_proposals::DKGEcdsaToEthereumAddress;
+use pallet_session::historical as pallet_session_historical;
 use sp_core::{sr25519::Signature, H256};
 use sp_runtime::{
 	impl_opaque_keys,
@@ -32,6 +33,10 @@ use sp_runtime::{
 		OpaqueKeys, Verify,
 	},
 	Percent, Permill,
+};
+use sp_staking::{
+	offence::{OffenceError, ReportOffence},
+	SessionIndex,
 };
 
 use sp_core::offchain::{testing, OffchainDbExt, OffchainWorkerExt, TransactionPoolExt};
@@ -72,6 +77,7 @@ frame_support::construct_runtime!(
 		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
 		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
 		Aura: pallet_aura::{Pallet, Storage, Config<T>},
+		Historical: pallet_session_historical::{Pallet},
 	}
 );
 
@@ -169,6 +175,26 @@ where
 	}
 }
 
+type IdentificationTuple = (AccountId, AccountId);
+type Offence = crate::DKGMisbehaviourOffence<IdentificationTuple>;
+
+parameter_types! {
+	pub static Offences: Vec<(Vec<AccountId>, Offence)> = vec![];
+}
+
+/// A mock offence report handler.
+pub struct OffenceHandler;
+impl ReportOffence<AccountId, IdentificationTuple, Offence> for OffenceHandler {
+	fn report_offence(reporters: Vec<AccountId>, offence: Offence) -> Result<(), OffenceError> {
+		Offences::mutate(|l| l.push((reporters, offence)));
+		Ok(())
+	}
+
+	fn is_known_offence(_offenders: &[IdentificationTuple], _time_slot: &SessionIndex) -> bool {
+		false
+	}
+}
+
 parameter_types! {
 	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
 	pub const MaxProposers : u32 = 100;
@@ -184,6 +210,8 @@ impl pallet_dkg_proposal_handler::Config for Test {
 	type BatchId = u32;
 	type MaxProposalsPerBatch = MaxProposalsPerBatch;
 	type ForceOrigin = EnsureRoot<Self::AccountId>;
+	type ValidatorSet = Historical;
+	type ReportOffences = OffenceHandler;
 	type WeightInfo = ();
 }
 
@@ -246,6 +274,11 @@ impl pallet_session::Config for Test {
 	type SessionHandler = <MockSessionKeys as OpaqueKeys>::KeyTypeIdProviders;
 	type Keys = MockSessionKeys;
 	type WeightInfo = ();
+}
+
+impl pallet_session::historical::Config for Test {
+	type FullIdentification = AccountId;
+	type FullIdentificationOf = ConvertInto;
 }
 
 parameter_types! {

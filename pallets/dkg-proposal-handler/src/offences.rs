@@ -2,15 +2,16 @@ use super::*;
 use sp_runtime::{Perbill, Saturating};
 
 /// The type of DKG misbehaviour offences
-#[derive(RuntimeDebug, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Clone, PartialEq, Eq))]
+#[derive(Clone, RuntimeDebug, TypeInfo, Encode, Decode, PartialEq, Eq)]
 pub enum DKGMisbehaviorOffenceType {
+	/// Signed a proposal not part of unsigned queue
 	SignedProposalNotInQueue,
+	/// Signed a malformed proposal, also not part of unsigned queue
+	SignedMalformedProposal,
 }
 
 /// An offence that is filed if a DKG authority misbehaves
-#[derive(RuntimeDebug, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Clone, PartialEq, Eq))]
+#[derive(Clone, RuntimeDebug, TypeInfo, PartialEq, Eq)]
 pub struct DKGMisbehaviourOffence<Offender> {
 	/// The current session index in which we report the unresponsive validators.
 	///

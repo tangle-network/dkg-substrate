@@ -2615,6 +2615,7 @@ dependencies = [
  "pallet-indices",
  "pallet-insecure-randomness-collective-flip",
  "pallet-nomination-pools",
+ "pallet-offences",
  "pallet-session",
  "pallet-staking",
  "pallet-staking-reward-curve",
@@ -6596,6 +6597,7 @@ name = "pallet-dkg-proposal-handler"
 version = "0.1.0"
 dependencies = [
  "dkg-runtime-primitives",
+ "ethabi",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
@@ -6800,6 +6802,23 @@ dependencies = [
  "scale-info",
  "sp-core 7.0.0",
  "sp-io 7.0.0",
+ "sp-runtime 7.0.0",
+ "sp-staking",
+ "sp-std 5.0.0",
+]
+
+[[package]]
+name = "pallet-offences"
+version = "4.0.0-dev"
+source = "git+https://github.com/paritytech/substrate?branch=polkadot-v0.9.43#5e49f6e44820affccaf517fd22af564f4b495d40"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "log",
+ "pallet-balances",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
  "sp-runtime 7.0.0",
  "sp-staking",
  "sp-std 5.0.0",
@@ -12645,7 +12664,7 @@ checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
  "cfg-if",
  "digest 0.10.7",
- "rand 0.4.6",
+ "rand 0.6.5",
  "static_assertions",
 ]
 

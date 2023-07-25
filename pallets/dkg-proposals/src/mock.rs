@@ -264,6 +264,8 @@ impl pallet_dkg_proposal_handler::Config for Test {
 	type UnsignedProposalExpiry = frame_support::traits::ConstU64<10>;
 	type SignedProposalHandler = ();
 	type MaxProposalsPerBatch = MaxProposers;
+	type ValidatorSet = ();
+	type ReportOffences = ();
 	type ForceOrigin = EnsureRoot<Self::AccountId>;
 	type WeightInfo = ();
 }

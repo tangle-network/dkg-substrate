@@ -452,12 +452,6 @@ impl onchain::Config for OnChainSeqPhragmen {
 	type TargetsBound = MaxOnChainElectableTargets;
 }
 
-impl pallet_offences::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
-	type IdentificationTuple = pallet_session::historical::IdentificationTuple<Self>;
-	type OnOffenceHandler = Staking;
-}
-
 pub struct WebbMinerConfig;
 impl pallet_election_provider_multi_phase::MinerConfig for WebbMinerConfig {
 	type AccountId = AccountId;
@@ -652,7 +646,15 @@ impl pallet_dkg_proposal_handler::Config for Runtime {
 	type UnsignedProposalExpiry = UnsignedProposalExpiry;
 	type SignedProposalHandler = (BridgeRegistry, DKG);
 	type ForceOrigin = EnsureRoot<Self::AccountId>;
+	type ValidatorSet = Historical;
+	type ReportOffences = Offences;
 	type WeightInfo = pallet_dkg_proposal_handler::weights::WebbWeight<Runtime>;
+}
+
+impl pallet_offences::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type IdentificationTuple = pallet_session::historical::IdentificationTuple<Self>;
+	type OnOffenceHandler = Staking;
 }
 
 parameter_types! {
@@ -760,7 +762,7 @@ impl pallet_im_online::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type NextSessionRotation = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
 	type ValidatorSet = Historical;
-	type ReportUnresponsiveness = ();
+	type ReportUnresponsiveness = Offences;
 	type UnsignedPriority = ImOnlineUnsignedPriority;
 	type WeightInfo = pallet_im_online::weights::SubstrateWeight<Runtime>;
 	type MaxKeys = MaxKeys;
@@ -797,6 +799,7 @@ construct_runtime!(
 	ElectionProviderMultiPhase: pallet_election_provider_multi_phase,
 	BagsList: pallet_bags_list,
 	NominationPools: pallet_nomination_pools,
+	Offences: pallet_offences,
 	Staking: pallet_staking,
 	Session: pallet_session,
 	Historical: pallet_session_historical,

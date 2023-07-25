@@ -124,7 +124,7 @@ use sp_runtime::{
 		storage::StorageValueRef,
 		storage_lock::{StorageLock, Time},
 	},
-	traits::{AtLeast32BitUnsigned, Zero},
+	traits::{AtLeast32BitUnsigned, Convert, Zero},
 };
 use sp_staking::{
 	offence::{DisableStrategy, Kind, Offence, ReportOffence},
@@ -348,6 +348,13 @@ pub mod pallet {
 			/// Signature of the hash of the proposal data.
 			signature: Vec<u8>,
 		},
+		/// Offence reported against current DKG
+		SigningOffenceReported {
+			/// the type of offence reported
+			offence: DKGMisbehaviorOffenceType,
+			/// the signed data that is the source of the report
+			signed_data: SignedProposalBatchOf<T>,
+		},
 	}
 
 	// Errors inform users that something went wrong.
@@ -383,6 +390,12 @@ pub mod pallet {
 		ArithmeticOverflow,
 		/// Batch does not contain proposals
 		EmptyBatch,
+		/// The signature does not match current active key
+		NotSignedByCurrentDKG,
+		/// the signed data is invalid
+		InvalidSignedData,
+		/// the prposal exists on runtime and is valid
+		ProposalExistsAndIsValid,
 	}
 
 	#[pallet::hooks]
@@ -552,6 +565,100 @@ pub mod pallet {
 				}
 			} else {
 				Err(Error::<T>::ProposalMustBeUnsigned.into())
+			}
+		}
+
+		#[pallet::weight(<T as Config>::WeightInfo::submit_signed_proposals(signed_data.len() as u32))]
+		#[pallet::call_index(2)]
+		pub fn submit_dkg_signing_offence(
+			origin: OriginFor<T>,
+			signed_data: SignedProposalBatchOf<T>,
+		) -> DispatchResult {
+			let _caller = ensure_signed(origin)?;
+
+			// sanity check
+			ensure!(!signed_data.proposals.is_empty(), Error::<T>::InvalidSignedData);
+
+			// is the signature valid
+			let result = ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(
+				&signed_data.signature,
+				&signed_data.data(),
+			);
+
+			// sanity check, does the signature match current DKG
+			// we can only report the current DKG, this maybe a valid signature
+			// from a previous DKG, but that is not considered here
+			ensure!(result.is_ok(), Error::<T>::NotSignedByCurrentDKG);
+
+			// retreive the typed chain id
+			let common_typed_chain_id = match decode_proposal_identifier(
+				signed_data.proposals.first().expect("Batch cannot be empty, checked above"),
+			) {
+				Ok(v) => v,
+				Err(e) => return Err(Self::handle_validation_error(e).into()),
+			};
+
+			// check if all the proposals have the same typed_chain_id
+			for proposal in signed_data.proposals.iter() {
+				let proposal_typed_chain_id = match decode_proposal_identifier(proposal) {
+					Ok(v) => v,
+					Err(e) => return Err(Self::handle_validation_error(e).into()),
+				};
+
+				if proposal_typed_chain_id != common_typed_chain_id {
+					// this is a malformed proposal, this has a valid signature
+					// but the typed chain id is not common,
+					// this means that the signature happened outside of pallet, pallet will never
+					// create a mixed typed_chain proposal
+					// report an offence
+					let _ =
+						Self::report_offence(DKGMisbehaviorOffenceType::SignedMalformedProposal);
+
+					Self::deposit_event(Event::SigningOffenceReported {
+						offence: DKGMisbehaviorOffenceType::SignedMalformedProposal,
+						signed_data,
+					});
+					return Ok(())
+				}
+			}
+
+			// is this a real batch?
+			let expected_batch = SignedProposals::<T>::get(
+				common_typed_chain_id.typed_chain_id,
+				signed_data.batch_id,
+			);
+
+			if expected_batch.is_none() {
+				// ensure that this isnt a valid signed batch with just the batch id changed
+				// this is expensive, the weight should be paid by the caller
+				let batches_iterator =
+					SignedProposals::<T>::iter_prefix_values(common_typed_chain_id.typed_chain_id);
+				for batch in batches_iterator {
+					if batch.data() == signed_data.data() {
+						return Err(Error::<T>::ProposalExistsAndIsValid.into())
+					}
+				}
+
+				// make sure this is not front running the submitSignedProposal flow
+				// this proposal could be valid and waiting in the UnsignedProposalQueue
+				let unsigned_batches_iterator = UnsignedProposalQueue::<T>::iter_prefix_values(
+					common_typed_chain_id.typed_chain_id,
+				);
+				for batch in unsigned_batches_iterator {
+					if batch.data() == signed_data.data() {
+						return Err(Error::<T>::ProposalExistsAndIsValid.into())
+					}
+				}
+
+				// the batch was never part of unsigned proposal queue, report an offence
+				let _ = Self::report_offence(DKGMisbehaviorOffenceType::SignedProposalNotInQueue);
+				Self::deposit_event(Event::SigningOffenceReported {
+					offence: DKGMisbehaviorOffenceType::SignedProposalNotInQueue,
+					signed_data,
+				});
+				return Ok(())
+			} else {
+				return Err(Error::<T>::ProposalExistsAndIsValid.into())
 			}
 		}
 	}
