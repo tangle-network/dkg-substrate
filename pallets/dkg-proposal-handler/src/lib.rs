@@ -626,9 +626,9 @@ pub mod pallet {
 					offence: DKGMisbehaviorOffenceType::SignedProposalNotInQueue,
 					signed_data,
 				});
-				return Ok(())
+				Ok(())
 			} else {
-				return Err(Error::<T>::ProposalExistsAndIsValid.into())
+				Err(Error::<T>::ProposalExistsAndIsValid.into())
 			}
 		}
 

@@ -30,6 +30,7 @@ use frame_support::{
 use frame_system as system;
 use frame_system::EnsureRoot;
 pub use pallet_balances;
+use pallet_session::historical as pallet_session_historical;
 use sp_core::{sr25519::Signature, H256};
 use sp_runtime::{
 	app_crypto::{ecdsa::Public, sr25519},
@@ -39,6 +40,10 @@ use sp_runtime::{
 		IdentityLookup, OpaqueKeys, Verify,
 	},
 	Percent,
+};
+use sp_staking::{
+	offence::{OffenceError, ReportOffence},
+	SessionIndex,
 };
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
@@ -65,6 +70,7 @@ frame_support::construct_runtime!(
 		DKGMetadata: pallet_dkg_metadata::{Pallet, Call, Config<T>, Event<T>, Storage},
 		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
 		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
+		Historical: pallet_session_historical::{Pallet},
 	}
 );
 
@@ -224,6 +230,11 @@ impl pallet_session::Config for Test {
 	type WeightInfo = ();
 }
 
+impl pallet_session::historical::Config for Test {
+	type FullIdentification = AccountId;
+	type FullIdentificationOf = ConvertInto;
+}
+
 parameter_types! {
 	pub const PotId: PalletId = PalletId(*b"PotStake");
 	pub const MaxCandidates: u32 = 1000;
@@ -248,6 +259,26 @@ impl pallet_collator_selection::Config for Test {
 	type WeightInfo = ();
 }
 
+type IdentificationTuple = (AccountId, AccountId);
+type Offence = pallet_dkg_proposal_handler::DKGMisbehaviourOffence<IdentificationTuple>;
+
+parameter_types! {
+	pub static Offences: Vec<(Vec<AccountId>, Offence)> = vec![];
+}
+
+/// A mock offence report handler.
+pub struct OffenceHandler;
+impl ReportOffence<AccountId, IdentificationTuple, Offence> for OffenceHandler {
+	fn report_offence(reporters: Vec<AccountId>, offence: Offence) -> Result<(), OffenceError> {
+		Offences::mutate(|l| l.push((reporters, offence)));
+		Ok(())
+	}
+
+	fn is_known_offence(_offenders: &[IdentificationTuple], _time_slot: &SessionIndex) -> bool {
+		false
+	}
+}
+
 parameter_types! {
 	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
 	pub const MaxVotes : u32 = 100;
@@ -264,8 +295,8 @@ impl pallet_dkg_proposal_handler::Config for Test {
 	type UnsignedProposalExpiry = frame_support::traits::ConstU64<10>;
 	type SignedProposalHandler = ();
 	type MaxProposalsPerBatch = MaxProposers;
-	type ValidatorSet = ();
-	type ReportOffences = ();
+	type ValidatorSet = Historical;
+	type ReportOffences = OffenceHandler;
 	type ForceOrigin = EnsureRoot<Self::AccountId>;
 	type WeightInfo = ();
 }

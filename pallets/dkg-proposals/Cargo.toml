@@ -33,6 +33,7 @@ pallet-balances = { workspace = true }
 pallet-timestamp = { workspace = true }
 frame-benchmarking = { workspace = true, optional = true }
 pallet-dkg-metadata = { workspace = true }
+sp-staking = { workspace = true }
 
 [dev-dependencies]
 webb-proposals = { workspace = true, default-features = false }
@@ -63,6 +64,7 @@ std = [
 	"webb-proposals/std",
 	"pallet-collator-selection/std",
 	"pallet-dkg-metadata/std",
+	"sp-staking/std",
 ]
 runtime-benchmarks = [
   "frame-benchmarking",
