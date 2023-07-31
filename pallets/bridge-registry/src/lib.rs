@@ -221,6 +221,21 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		/// <HB SBP Review #3
+		///
+		/// This pre-dispatch weight function can be optimized:
+		/// You might want to add the lenght of `resources_ids` into the
+		/// WeightInfo::force_reset_indices() fn as a complexity value.
+		/// By implementing this, you can get the writes according the number of
+		/// iteractions and not the maximum of 1000.
+		///
+		/// Also the resources_ids is an unbounded vec, so this should be limited
+		/// so the max value in the benchmark matches with the max amount of resource ids used.
+		///
+		/// https://paritytech.github.io/substrate/master/frame_benchmarking/v1/macro.benchmarks.html
+		/// https://paritytech.github.io/substrate/master/frame_benchmarking/v2/index.html
+		///
+		/// >
 		#[pallet::weight(<T as Config>::WeightInfo::force_reset_indices())]
 		#[pallet::call_index(1)]
 		pub fn force_reset_indices(

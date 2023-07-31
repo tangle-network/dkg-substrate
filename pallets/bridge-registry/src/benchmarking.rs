@@ -40,8 +40,24 @@ benchmarks_instance_pallet! {
 		);
 	}
 
+
 	force_reset_indices {
 		let mut resource_ids : Vec<ResourceId> = vec![];
+	/// <HB SBP Review #3
+	///
+	/// This benchmark is not doing what it's supposed to do. As the bridge_index and resources_ids have always the same values
+	/// (1_u32 and [0u8;32].into() respectively) the value is catched resulting in one write only (when it should be 1000 writes in this case)
+	///
+	/// If you check the results in the weight.rs file, it only shows one write when in this case is supposed to be 1000 writes.
+	/// This might lead to failures in the block production where if the lenght of the vector is bigger than expected, that might
+	/// overflow the block weight.
+	///
+	/// Try changing the push statement to:
+	///
+	/// resource_ids.push(i.encode().into())
+	///
+	/// and regenarate the weight.rs file.
+	/// >
 		for i in 0..1000 {
 			resource_ids.push([0u8;32].into())
 		}
