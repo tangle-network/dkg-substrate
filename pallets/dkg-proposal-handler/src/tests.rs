@@ -579,3 +579,193 @@ fn force_submit_should_work_with_valid_proposals() {
 		));
 	});
 }
+
+#[test]
+fn offence_reporting_rejects_an_existing_proposal() {
+	execute_test_with(|| {
+		// First submission
+		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
+
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			RuntimeOrigin::root(),
+			Proposal::Unsigned {
+				kind: ProposalKind::EVM,
+				data: tx_v_2.encode().try_into().unwrap()
+			},
+		));
+
+		// lets time travel to 5 blocks later and ensure a batch is created
+		run_n_blocks(5);
+
+		let mut signed_proposal = mock_signed_proposal_batch(tx_v_2.clone());
+
+		assert_ok!(DKGProposalHandler::submit_signed_proposals(
+			RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
+			vec![signed_proposal.clone()]
+		));
+
+		// Report offence on a valid signed batch should be rejected
+		assert_noop!(
+			DKGProposalHandler::submit_dkg_signing_offence(
+				RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
+				signed_proposal.clone()
+			),
+			Error::<Test>::ProposalExistsAndIsValid
+		);
+
+		// Report offence on a valid signed batch with batch_id changed should be rejected
+		signed_proposal.batch_id = 999;
+		assert_noop!(
+			DKGProposalHandler::submit_dkg_signing_offence(
+				RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
+				signed_proposal.clone()
+			),
+			Error::<Test>::ProposalExistsAndIsValid
+		);
+
+		// Should reject a signed proposal without any proposals
+		signed_proposal.proposals = vec![].try_into().unwrap();
+		assert_noop!(
+			DKGProposalHandler::submit_dkg_signing_offence(
+				RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
+				signed_proposal
+			),
+			Error::<Test>::InvalidSignedData
+		);
+	});
+}
+
+#[test]
+fn offence_reporting_rejects_malformed_proposal() {
+	execute_test_with(|| {
+		// First submission
+		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
+
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			RuntimeOrigin::root(),
+			Proposal::Unsigned {
+				kind: ProposalKind::EVM,
+				data: tx_v_2.encode().try_into().unwrap()
+			},
+		));
+
+		// lets time travel to 5 blocks later and ensure a batch is created
+		run_n_blocks(5);
+
+		let mut signed_proposal = mock_signed_proposal_batch(tx_v_2.clone());
+
+		assert_ok!(DKGProposalHandler::submit_signed_proposals(
+			RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
+			vec![signed_proposal.clone()]
+		));
+
+		// Should reject a signed proposal with extra data inserted
+		let unsigned_proposal_1 = Proposal::Unsigned {
+			kind: ProposalKind::EVM,
+			data: tx_v_2.encode().try_into().unwrap(),
+		};
+		let unsigned_proposal_2 = Proposal::Unsigned {
+			kind: ProposalKind::EVM,
+			data: tx_v_2.encode().try_into().unwrap(),
+		};
+		signed_proposal.proposals =
+			vec![unsigned_proposal_1, unsigned_proposal_2].try_into().unwrap();
+		assert_noop!(
+			DKGProposalHandler::submit_dkg_signing_offence(
+				RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
+				signed_proposal
+			),
+			Error::<Test>::NotSignedByCurrentDKG
+		);
+	});
+}
+
+#[test]
+fn offence_reporting_rejects_proposal_in_current_unsigned_queue() {
+	execute_test_with(|| {
+		// First submission
+		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
+
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			RuntimeOrigin::root(),
+			Proposal::Unsigned {
+				kind: ProposalKind::EVM,
+				data: tx_v_2.encode().try_into().unwrap()
+			},
+		));
+
+		// lets time travel to 5 blocks later and ensure a batch is created
+		run_n_blocks(5);
+
+		let signed_proposal = mock_signed_proposal_batch(tx_v_2.clone());
+
+		// the signed proposal was never added to a batch but is waiting in unsigned queue
+		// this should be rejected
+		assert_noop!(
+			DKGProposalHandler::submit_dkg_signing_offence(
+				RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
+				signed_proposal.clone()
+			),
+			Error::<Test>::ProposalExistsAndIsValid
+		);
+
+		// as a sanity test, clean unsigned queue and this should be accepted
+		#[allow(deprecated)]
+		crate::UnsignedProposalQueue::<Test>::remove_prefix(TypedChainId::Evm(0), None);
+
+		assert_ok!(DKGProposalHandler::submit_dkg_signing_offence(
+			RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
+			signed_proposal
+		));
+	});
+}
+
+#[test]
+fn offence_reporting_accepts_proposal_signed_not_in_queue() {
+	execute_test_with(|| {
+		// First submission
+		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
+
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			RuntimeOrigin::root(),
+			Proposal::Unsigned {
+				kind: ProposalKind::EVM,
+				data: tx_v_2.encode().try_into().unwrap()
+			},
+		));
+
+		// lets time travel to 5 blocks later and ensure a batch is created
+		run_n_blocks(5);
+
+		let signed_proposal = mock_signed_proposal_batch(tx_v_2.clone());
+
+		assert_ok!(DKGProposalHandler::submit_signed_proposals(
+			RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
+			vec![signed_proposal.clone()]
+		));
+
+		// clean the queue
+		#[allow(deprecated)]
+		crate::SignedProposals::<Test>::remove_prefix(TypedChainId::Evm(0), None);
+
+		// Report offence on a non existent signed batch should be accepted
+		assert_ok!(DKGProposalHandler::submit_dkg_signing_offence(
+			RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
+			signed_proposal.clone()
+		));
+
+		let current_offences_reported = Offences::get();
+		assert_eq!(
+			current_offences_reported,
+			vec![(
+				vec![],
+				crate::DKGMisbehaviourOffence {
+					session_index: 0,
+					validator_set_count: 0,
+					offence: crate::DKGMisbehaviorOffenceType::SignedProposalNotInQueue,
+					offenders: [].into()
+				}
+			)]
+		);
+	});
+}

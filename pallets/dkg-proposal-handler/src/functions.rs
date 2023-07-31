@@ -102,6 +102,36 @@ impl<T: Config> Pallet<T> {
 		})
 	}
 
+	// report an offence against current active validator set
+	pub fn report_offence(
+		offence_type: DKGMisbehaviorOffenceType,
+	) -> Result<(), sp_staking::offence::OffenceError> {
+		let session_index = T::ValidatorSet::session_index();
+
+		// The current dkg authorities are the same as the current validator set
+		// so we pick the current validator set, this results in easier
+		// conversion to pallet offences index
+		let current_validators = T::ValidatorSet::validators();
+		let offenders = current_validators
+			.into_iter()
+			.enumerate()
+			.filter_map(|(_, id)| {
+				<T::ValidatorSet as ValidatorSetWithIdentification<T::AccountId>>::IdentificationOf::convert(
+					id.clone()
+				).map(|full_id| (id, full_id))
+			})
+			.collect::<Vec<IdentificationTuple<T>>>();
+
+		// we report an offence against the current DKG authorities
+		let offence = DKGMisbehaviourOffence {
+			offence: offence_type,
+			session_index,
+			validator_set_count: offenders.len() as u32,
+			offenders,
+		};
+		T::ReportOffences::report_offence(sp_std::vec![], offence)
+	}
+
 	// *** Offchain worker methods ***
 
 	/// Offchain worker function that submits signed proposals from the offchain storage on-chain
