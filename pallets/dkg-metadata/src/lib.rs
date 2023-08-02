@@ -125,6 +125,7 @@ use sp_runtime::{
 	traits::{AtLeast32BitUnsigned, Convert, IsMember, One, Saturating, Zero},
 	DispatchError, Permill, RuntimeAppPublic,
 };
+use frame_system::pallet_prelude::BlockNumberFor;
 use sp_std::{
 	collections::btree_map::BTreeMap,
 	convert::{TryFrom, TryInto},
@@ -134,6 +135,7 @@ use sp_std::{
 	prelude::*,
 	vec,
 };
+use frame_support::traits::GenesisBuild;
 use types::RoundMetadata;
 use weights::WeightInfo;
 
@@ -195,8 +197,8 @@ pub mod pallet {
 			+ From<ecdsa::Public>
 			+ MaxEncodedLen;
 		/// Jail lengths for misbehaviours
-		type KeygenJailSentence: Get<Self::BlockNumber>;
-		type SigningJailSentence: Get<Self::BlockNumber>;
+		type KeygenJailSentence: Get<BlockNumberFor<Self>>;
+		type SigningJailSentence: Get<BlockNumberFor<Self>>;
 		/// Map from controller accounts to their DKG authority identifier.
 		type AuthorityIdOf: Convert<Self::AccountId, Option<Self::DKGId>>;
 		/// The reputation decay percentage
@@ -229,14 +231,14 @@ pub mod pallet {
 		type ProposalHandler: ProposalHandlerTrait<MaxProposalLength = Self::MaxProposalLength>;
 
 		/// A type that gives allows the pallet access to the session progress
-		type NextSessionRotation: EstimateNextSessionRotation<Self::BlockNumber>;
+		type NextSessionRotation: EstimateNextSessionRotation<BlockNumberFor<Self>>;
 
 		/// Number of blocks of cooldown after unsigned transaction is included.
 		///
 		/// This ensures that we only accept unsigned transactions once, every `UnsignedInterval`
 		/// blocks.
 		#[pallet::constant]
-		type UnsignedInterval: Get<Self::BlockNumber>;
+		type UnsignedInterval: Get<BlockNumberFor<Self>>;
 		/// A configuration for base priority of unsigned transactions.
 		///
 		/// This is exposed so that it can be tuned for particular runtime, when
@@ -246,7 +248,7 @@ pub mod pallet {
 
 		/// Session length helper allowing to query session length across runtime upgrades.
 		#[pallet::constant]
-		type SessionPeriod: Get<Self::BlockNumber>;
+		type SessionPeriod: Get<BlockNumberFor<Self>>;
 
 		/// MaxLength for keys
 		#[pallet::constant]
@@ -336,7 +338,7 @@ pub mod pallet {
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		fn offchain_worker(block_number: T::BlockNumber) {
+		fn offchain_worker(block_number: BlockNumberFor<T>) {
 			let res = Self::submit_genesis_public_key_onchain(block_number);
 			log::debug!(
 				target: "runtime::dkg_metadata",
@@ -438,7 +440,7 @@ pub mod pallet {
 	/// This storage entry defines when new transaction is going to be accepted.
 	#[pallet::storage]
 	#[pallet::getter(fn next_unsigned_at)]
-	pub(super) type NextUnsignedAt<T: Config> = StorageValue<_, T::BlockNumber, ValueQuery>;
+	pub(super) type NextUnsignedAt<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 	/// Check if there is a refresh in progress.
 	#[pallet::storage]
 	#[pallet::getter(fn refresh_in_progress)]
@@ -603,14 +605,14 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn jailed_keygen_authorities)]
 	pub type JailedKeygenAuthorities<T: Config> =
-		StorageMap<_, Blake2_256, T::DKGId, T::BlockNumber, ValueQuery>;
+		StorageMap<_, Blake2_256, T::DKGId, BlockNumberFor<T>, ValueQuery>;
 
 	/// Tracks jailed authorities for signing by mapping
 	/// to the block number when the authority was last jailed
 	#[pallet::storage]
 	#[pallet::getter(fn jailed_signing_authorities)]
 	pub type JailedSigningAuthorities<T: Config> =
-		StorageMap<_, Blake2_256, T::DKGId, T::BlockNumber, ValueQuery>;
+		StorageMap<_, Blake2_256, T::DKGId, BlockNumberFor<T>, ValueQuery>;
 
 	/// The current best authorities of the active keygen set
 	#[pallet::storage]
@@ -628,7 +630,7 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn last_session_rotation_block)]
 	pub(super) type LastSessionRotationBlock<T: Config> =
-		StorageValue<_, T::BlockNumber, ValueQuery>;
+		StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
 	/// The pending refresh proposal waiting for signature
 	#[pallet::storage]
@@ -1953,7 +1955,7 @@ impl<T: Config> Pallet<T> {
 	/// We require the respective threshold of submissions of the same
 	/// DKG public key to be submitted in order to modify the on-chain
 	/// storage.
-	fn submit_genesis_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
+	fn submit_genesis_public_key_onchain(block_number: BlockNumberFor<T>) -> Result<(), &'static str> {
 		let next_unsigned_at = <NextUnsignedAt<T>>::get();
 		if next_unsigned_at > block_number {
 			return Err("Too early to send unsigned transaction")
@@ -1964,7 +1966,7 @@ impl<T: Config> Pallet<T> {
 			let mut agg_key_ref = StorageValueRef::persistent(AGGREGATED_PUBLIC_KEYS_AT_GENESIS);
 			let mut submit_at_ref = StorageValueRef::persistent(SUBMIT_GENESIS_KEYS_AT);
 			const RECENTLY_SENT: &str = "Already submitted a key in this session";
-			let submit_at = submit_at_ref.get::<T::BlockNumber>();
+			let submit_at = submit_at_ref.get::<BlockNumberFor<T>>();
 
 			let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
 
@@ -2015,7 +2017,7 @@ impl<T: Config> Pallet<T> {
 	/// We require the respective threshold of submissions of the same
 	/// DKG public key to be submitted in order to modify the on-chain
 	/// storage.
-	fn submit_next_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
+	fn submit_next_public_key_onchain(block_number: BlockNumberFor<T>) -> Result<(), &'static str> {
 		let next_unsigned_at = <NextUnsignedAt<T>>::get();
 		if next_unsigned_at > block_number {
 			return Err("Too early to send unsigned transaction")
@@ -2027,7 +2029,7 @@ impl<T: Config> Pallet<T> {
 			let mut agg_key_ref = StorageValueRef::persistent(AGGREGATED_PUBLIC_KEYS);
 			let mut submit_at_ref = StorageValueRef::persistent(SUBMIT_KEYS_AT);
 			const RECENTLY_SENT: &str = "Already submitted a key in this session";
-			let submit_at = submit_at_ref.get::<T::BlockNumber>();
+			let submit_at = submit_at_ref.get::<BlockNumberFor<T>>();
 
 			let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
 
@@ -2075,7 +2077,7 @@ impl<T: Config> Pallet<T> {
 	/// An offchain function that collects the misbehaviour reports in
 	/// the offchain storage and submits them to the chain.
 	fn submit_misbehaviour_reports_onchain(
-		block_number: T::BlockNumber,
+		block_number: BlockNumberFor<T>,
 	) -> Result<(), &'static str> {
 		let next_unsigned_at = <NextUnsignedAt<T>>::get();
 		if next_unsigned_at > block_number {
@@ -2152,7 +2154,7 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
-	pub fn should_refresh(_now: T::BlockNumber) -> bool {
+	pub fn should_refresh(_now: BlockNumberFor<T>) -> bool {
 		let next_dkg_public_key = Self::next_dkg_public_key();
 		let next_dkg_public_key_signature = Self::next_public_key_signature();
 		next_dkg_public_key.is_some() && next_dkg_public_key_signature.is_none()
@@ -2345,7 +2347,7 @@ impl<
 		BlockNumber: AtLeast32BitUnsigned
 			+ Clone
 			+ core::fmt::Debug
-			+ sp_std::convert::From<<T as frame_system::Config>::BlockNumber>,
+			+ sp_std::convert::From<BlockNumberFor<T>>,
 		Period: Get<BlockNumber>,
 		Offset: Get<BlockNumber>,
 		T: Config + pallet_session::Config,

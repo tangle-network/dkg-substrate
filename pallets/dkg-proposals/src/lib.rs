@@ -105,7 +105,8 @@ use frame_support::{
 	traits::{EnsureOrigin, EstimateNextSessionRotation, Get},
 	BoundedVec,
 };
-
+use frame_system::pallet_prelude::BlockNumberFor;
+use frame_support::traits::GenesisBuild;
 use sp_runtime::{traits::Convert, RuntimeAppPublic};
 use sp_std::prelude::*;
 use types::{ProposalStatus, ProposalVotes};
@@ -150,7 +151,7 @@ pub mod pallet {
 		type AdminOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 
 		/// Estimate next session rotation
-		type NextSessionRotation: EstimateNextSessionRotation<Self::BlockNumber>;
+		type NextSessionRotation: EstimateNextSessionRotation<BlockNumberFor<Self>>;
 
 		/// Authority identifier type
 		type DKGId: Member + Parameter + RuntimeAppPublic + MaybeSerializeDeserialize;
@@ -173,11 +174,11 @@ pub mod pallet {
 		type ChainIdentifier: Get<TypedChainId>;
 
 		#[pallet::constant]
-		type ProposalLifetime: Get<Self::BlockNumber>;
+		type ProposalLifetime: Get<BlockNumberFor<Self>>;
 
 		/// The session period
 		#[pallet::constant]
-		type Period: Get<Self::BlockNumber>;
+		type Period: Get<BlockNumberFor<Self>>;
 
 		/// The max votes to store for for and against
 		#[pallet::constant]
@@ -256,7 +257,7 @@ pub mod pallet {
 		TypedChainId,
 		Blake2_256,
 		(ProposalNonce, ProposalOf<T>),
-		ProposalVotes<T::AccountId, T::BlockNumber, T::MaxVotes>,
+		ProposalVotes<T::AccountId, BlockNumberFor<T>, T::MaxVotes>,
 	>;
 
 	/// Utilized by the bridge software to map resource IDs to actual methods
@@ -629,7 +630,7 @@ impl<T: Config> Pallet<T> {
 			Some(v) => v,
 			None => ProposalVotes::<
 				<T as frame_system::Config>::AccountId,
-				<T as frame_system::Config>::BlockNumber,
+				BlockNumberFor<T>,
 				<T as Config>::MaxVotes,
 			> {
 				expiry: now + T::ProposalLifetime::get(),

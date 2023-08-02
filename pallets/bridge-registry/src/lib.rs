@@ -55,7 +55,7 @@ use weights::WeightInfo;
 use types::*;
 
 use sp_std::{convert::TryInto, prelude::*, vec};
-
+use frame_support::traits::GenesisBuild;
 use frame_support::pallet_prelude::{ensure, DispatchError};
 use sp_runtime::traits::{AtLeast32Bit, One, Zero};
 use webb_proposals::{evm::AnchorUpdateProposal, Proposal, ProposalKind, ResourceId};
