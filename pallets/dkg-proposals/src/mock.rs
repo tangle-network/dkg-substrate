@@ -24,7 +24,7 @@ pub use dkg_runtime_primitives::{
 };
 use frame_support::{
 	assert_ok, ord_parameter_types, parameter_types,
-	traits::{GenesisBuild, OnFinalize, OnInitialize},
+	traits::{OnFinalize, OnInitialize},
 	PalletId,
 };
 use frame_system as system;

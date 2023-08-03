@@ -16,8 +16,7 @@
 #![allow(clippy::from_over_into, clippy::unwrap_used)]
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
-	construct_runtime, parameter_types, sp_io::TestExternalities, traits::GenesisBuild,
-	BasicExternalities,
+	construct_runtime, parameter_types, sp_io::TestExternalities, BasicExternalities,
 };
 use frame_system::EnsureRoot;
 use sp_core::{
@@ -28,12 +27,12 @@ use sp_keystore::{testing::MemoryKeystore, KeystoreExt, KeystorePtr};
 use sp_runtime::{
 	app_crypto::ecdsa::Public,
 	impl_opaque_keys,
-	testing::{Header, TestXt},
+	testing::TestXt,
 	traits::{
 		BlakeTwo256, ConvertInto, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup,
 		OpaqueKeys, Verify,
 	},
-	Percent, Permill,
+	BuildStorage, Percent, Permill,
 };
 use std::{sync::Arc, vec};
 
@@ -52,10 +51,10 @@ impl_opaque_keys! {
 construct_runtime!(
 	pub enum Test
 	{
-		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
-		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
-		DKGMetadata: pallet_dkg_metadata::{Pallet, Call, Config<T>, Event<T>, Storage},
-		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
+		System: frame_system,
+		Timestamp: pallet_timestamp,
+		DKGMetadata: pallet_dkg_metadata,
+		Session: pallet_session,
 	}
 );
 
@@ -76,9 +75,9 @@ impl frame_system::Config for Test {
 	type Block = frame_system::mocking::MockBlock<Test>;
 	type RuntimeCall = RuntimeCall;
 	type Hashing = BlakeTwo256;
+	type Hash = H256;
 	type AccountId = AccountId;
 	type Lookup = IdentityLookup<Self::AccountId>;
-	type Header = Header;
 	type RuntimeEvent = RuntimeEvent;
 	type BlockHashCount = BlockHashCount;
 	type Version = ();
@@ -222,7 +221,7 @@ pub fn new_test_ext(ids: Vec<u8>) -> TestExternalities {
 }
 
 pub fn new_test_ext_raw_authorities(authorities: Vec<(AccountId, DKGId)>) -> TestExternalities {
-	let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
+	let mut t = RuntimeGenesisConfig::default().build_storage().unwrap();
 
 	let session_keys: Vec<_> = authorities
 		.iter()

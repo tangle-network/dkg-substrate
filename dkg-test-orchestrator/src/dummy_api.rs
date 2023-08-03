@@ -318,6 +318,14 @@ impl ApiExt<TestBlock> for DummyApi {
 	{
 		todo!()
 	}
+
+	fn set_call_context(&mut self, _call_context: CallContext) {
+		todo!()
+	}
+
+	fn register_extension<E: Extension>(&mut self, _extension: E) {
+		todo!()
+	}
 }
 
 impl AsTrieBackend<BlakeTwo256, Vec<u8>> for DummyStateBackend {
@@ -507,7 +515,6 @@ impl sp_api::Core<TestBlock> for DummyApi {
 	fn __runtime_api_internal_call_api_at(
 		&self,
 		_: H256,
-		_: ExecutionContext,
 		_: Vec<u8>,
 		_: &dyn Fn(RuntimeVersion) -> &'static str,
 	) -> ApiResult<Vec<u8>> {
@@ -527,7 +534,6 @@ impl
 	fn __runtime_api_internal_call_api_at(
 		&self,
 		_: H256,
-		_: ExecutionContext,
 		_: Vec<u8>,
 		_: &dyn Fn(RuntimeVersion) -> &'static str,
 	) -> ApiResult<Vec<u8>> {
