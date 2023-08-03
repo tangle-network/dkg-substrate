@@ -137,6 +137,7 @@ sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v1
 sp-trie = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v1.0.0", default-features = false }
 sp-state-machine = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v1.0.0", default-features = false }
 
+sc-offchain = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v1.0.0" }
 sc-cli = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v1.0.0" }
 sc-executor = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v1.0.0" }
 sc-service = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v1.0.0" }

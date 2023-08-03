@@ -15,9 +15,9 @@
 use dkg_primitives::ResourceId;
 use dkg_standalone_runtime::{
 	constants::currency::{Balance, DOLLARS},
-	AccountId, BalancesConfig, DKGConfig, DKGId, DKGProposalsConfig, GenesisConfig, ImOnlineConfig,
-	MaxNominations, Perbill, SessionConfig, Signature, StakerStatus, StakingConfig, SudoConfig,
-	SystemConfig, WASM_BINARY,
+	AccountId, BalancesConfig, BridgeRegistryConfig, DKGConfig, DKGId, DKGProposalsConfig,
+	ImOnlineConfig, MaxNominations, Perbill, RuntimeGenesisConfig, SessionConfig, Signature,
+	StakerStatus, StakingConfig, SudoConfig, SystemConfig, WASM_BINARY,
 };
 use hex_literal::hex;
 use pallet_bridge_registry::types::{BridgeInfo, BridgeMetadata, SerdeData};
@@ -45,7 +45,7 @@ const RESOURCE_ID_ATHENA_HERMES: ResourceId = ResourceId(hex_literal::hex!(
 ));
 
 /// Specialized `ChainSpec`. This is a specialization of the general Substrate ChainSpec type.
-pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
+pub type ChainSpec = sc_service::GenericChainSpec<RuntimeGenesisConfig>;
 
 /// Generate a crypto pair from seed.
 pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Public {
@@ -352,7 +352,7 @@ fn testnet_genesis(
 	initial_r_ids: Vec<(ResourceId, Vec<u8>)>,
 	initial_proposers: Vec<AccountId>,
 	_enable_println: bool,
-) -> GenesisConfig {
+) -> RuntimeGenesisConfig {
 	const ENDOWMENT: Balance = 10_000_000 * DOLLARS;
 	const STASH: Balance = ENDOWMENT / 1000;
 
@@ -374,10 +374,11 @@ fn testnet_genesis(
 		}))
 		.collect::<Vec<_>>();
 
-	GenesisConfig {
+	RuntimeGenesisConfig {
 		system: SystemConfig {
 			// Add Wasm runtime to storage.
 			code: wasm_binary.to_vec(),
+			..Default::default()
 		},
 		sudo: SudoConfig { key: Some(root_key) },
 		transaction_payment: Default::default(),
@@ -417,7 +418,7 @@ fn testnet_genesis(
 			authority_ids: initial_authorities.iter().map(|(x, ..)| x.clone()).collect::<_>(),
 		},
 		dkg_proposals: DKGProposalsConfig { initial_chain_ids, initial_r_ids, initial_proposers },
-		bridge_registry: pallet_bridge_registry::pallet::GenesisConfig {
+		bridge_registry: BridgeRegistryConfig {
 			bridges: bounded_vec![BridgeMetadata {
 				resource_ids: bounded_vec![RESOURCE_ID_HERMES_ATHENA, RESOURCE_ID_ATHENA_HERMES],
 				info: BridgeInfo {

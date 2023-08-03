@@ -34,20 +34,17 @@ use pallet_session::historical as pallet_session_historical;
 use sp_core::{sr25519::Signature, H256};
 use sp_runtime::{
 	app_crypto::{ecdsa::Public, sr25519},
-	testing::{Header, TestXt},
+	testing::TestXt,
 	traits::{
 		AccountIdConversion, BlakeTwo256, ConvertInto, Extrinsic as ExtrinsicT, IdentifyAccount,
 		IdentityLookup, OpaqueKeys, Verify,
 	},
-	Percent,
+	BuildStorage, Percent,
 };
 use sp_staking::{
 	offence::{OffenceError, ReportOffence},
 	SessionIndex,
 };
-
-type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
-type Block = frame_system::mocking::MockBlock<Test>;
 
 sp_runtime::impl_opaque_keys! {
 	pub struct MockSessionKeys {
@@ -57,20 +54,17 @@ sp_runtime::impl_opaque_keys! {
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
-	pub enum Test where
-		Block = Block,
-		NodeBlock = Block,
-		UncheckedExtrinsic = UncheckedExtrinsic,
+	pub enum Test
 	{
-		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
-		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
-		Balances: pallet_balances::{Pallet, Call, Storage, Event<T>},
-		CollatorSelection: pallet_collator_selection::{Pallet, Call, Storage, Event<T>, Config<T>},
-		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
-		DKGMetadata: pallet_dkg_metadata::{Pallet, Call, Config<T>, Event<T>, Storage},
-		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
-		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
-		Historical: pallet_session_historical::{Pallet},
+		System: frame_system,
+		Timestamp: pallet_timestamp,
+		Balances: pallet_balances,
+		CollatorSelection: pallet_collator_selection,
+		Session: pallet_session,
+		DKGMetadata: pallet_dkg_metadata,
+		DKGProposals: pallet_dkg_proposals,
+		DKGProposalHandler: pallet_dkg_proposal_handler,
+		Historical: pallet_session_historical,
 	}
 );
 
@@ -87,15 +81,14 @@ impl system::Config for Test {
 	type BaseCallFilter = frame_support::traits::Everything;
 	type BlockHashCount = BlockHashCount;
 	type BlockLength = ();
-	type BlockNumber = u64;
 	type BlockWeights = ();
 	type RuntimeCall = RuntimeCall;
 	type DbWeight = ();
 	type RuntimeEvent = RuntimeEvent;
 	type Hash = H256;
 	type Hashing = BlakeTwo256;
-	type Header = Header;
-	type Index = u64;
+	type Block = frame_system::mocking::MockBlock<Test>;
+	type Nonce = u64;
 	type Lookup = IdentityLookup<Self::AccountId>;
 	type OnKilledAccount = ();
 	type OnNewAccount = ();
@@ -125,9 +118,9 @@ impl pallet_balances::Config for Test {
 	type MaxLocks = ();
 	type MaxReserves = ();
 	type ReserveIdentifier = [u8; 8];
-	type HoldIdentifier = ();
 	type FreezeIdentifier = ();
 	type MaxHolds = ();
+	type RuntimeHoldReason = RuntimeHoldReason;
 	type MaxFreezes = ();
 	type WeightInfo = ();
 }
@@ -238,8 +231,8 @@ impl pallet_session::historical::Config for Test {
 parameter_types! {
 	pub const PotId: PalletId = PalletId(*b"PotStake");
 	pub const MaxCandidates: u32 = 1000;
-	pub const MinCandidates: u32 = 0;
 	pub const MaxInvulnerables: u32 = 100;
+	pub const MinEligibleCollators : u32 = 2;
 	pub const KickThreshold: u32 = Period::get() * 10;
 }
 
@@ -249,10 +242,10 @@ impl pallet_collator_selection::Config for Test {
 	type UpdateOrigin = frame_system::EnsureRoot<Self::AccountId>;
 	type PotId = PotId;
 	type MaxCandidates = MaxCandidates;
-	type MinCandidates = MinCandidates;
 	type MaxInvulnerables = MaxInvulnerables;
 	// should be a multiple of session or things will get inconsistent
 	type KickThreshold = KickThreshold;
+	type MinEligibleCollators = MinEligibleCollators;
 	type ValidatorId = <Self as frame_system::Config>::AccountId;
 	type ValidatorIdOf = pallet_collator_selection::IdentityCollator;
 	type ValidatorRegistration = Session;
@@ -379,7 +372,7 @@ pub struct ExtBuilder;
 impl ExtBuilder {
 	pub fn build() -> sp_io::TestExternalities {
 		let dkg_id = PalletId(*b"dw/dkgac").into_account_truncating();
-		let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
+		let mut t = RuntimeGenesisConfig::default().build_storage().unwrap();
 		pallet_balances::GenesisConfig::<Test> { balances: vec![(dkg_id, ENDOWED_BALANCE)] }
 			.assimilate_storage(&mut t)
 			.unwrap();
@@ -389,7 +382,7 @@ impl ExtBuilder {
 	}
 
 	pub fn with_genesis_collators() -> sp_io::TestExternalities {
-		let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
+		let mut t = RuntimeGenesisConfig::default().build_storage().unwrap();
 		let candidates = vec![
 			(mock_pub_key(PROPOSER_A), mock_dkg_id(PROPOSER_A), 1000),
 			(mock_pub_key(PROPOSER_B), mock_dkg_id(PROPOSER_B), 1000),
