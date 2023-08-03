@@ -221,7 +221,7 @@ pub fn new_test_ext(ids: Vec<u8>) -> TestExternalities {
 }
 
 pub fn new_test_ext_raw_authorities(authorities: Vec<(AccountId, DKGId)>) -> TestExternalities {
-	let mut t = RuntimeGenesisConfig::default().build_storage().unwrap();
+	let mut t = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
 
 	let session_keys: Vec<_> = authorities
 		.iter()
@@ -238,6 +238,15 @@ pub fn new_test_ext_raw_authorities(authorities: Vec<(AccountId, DKGId)>) -> Tes
 	pallet_session::GenesisConfig::<Test> { keys: session_keys }
 		.assimilate_storage(&mut t)
 		.unwrap();
+
+	pallet_dkg_metadata::GenesisConfig::<Test> {
+		authorities: authorities.clone().into_iter().map(|(_, id)| id).collect(),
+		signature_threshold: 1,
+		keygen_threshold: 3,
+		authority_ids: authorities.into_iter().map(|(acc, id)| acc).collect(),
+	}
+	.assimilate_storage(&mut t)
+	.unwrap();
 
 	let mut ext = sp_io::TestExternalities::new(t);
 	// set to block 1 to test events

@@ -13359,7 +13359,7 @@ dependencies = [
 [[package]]
 name = "webb-proposals"
 version = "0.6.0"
-source = "git+https://github.com/webb-tools/webb-rs?branch=polkadot-v1.0.0#279edc9a959b29a2a3d6cc3217df33e22f0727db"
+source = "git+https://github.com/webb-tools/webb-rs#a960eaf9611d72786bd4dd96b35f70d151c3d2b8"
 dependencies = [
  "frame-support",
  "hex",

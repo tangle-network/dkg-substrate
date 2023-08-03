@@ -646,15 +646,6 @@ pub mod pallet {
 	pub(super) type CurrentRefreshProposal<T: Config> =
 		StorageValue<_, RefreshProposal, OptionQuery>;
 
-	#[pallet::genesis_config]
-	#[derive(frame_support::DefaultNoBound)]
-	pub struct GenesisConfig<T: Config> {
-		pub authorities: Vec<T::DKGId>,
-		pub keygen_threshold: u16,
-		pub signature_threshold: u16,
-		pub authority_ids: Vec<T::AccountId>,
-	}
-
 	#[pallet::error]
 	pub enum Error<T> {
 		/// No mapped account to authority
@@ -769,6 +760,25 @@ pub mod pallet {
 		AuthorityUnJailed { authority: T::DKGId },
 	}
 
+	#[pallet::genesis_config]
+	pub struct GenesisConfig<T: Config> {
+		pub authorities: Vec<T::DKGId>,
+		pub keygen_threshold: u16,
+		pub signature_threshold: u16,
+		pub authority_ids: Vec<T::AccountId>,
+	}
+
+	impl<T: Config> Default for GenesisConfig<T> {
+		fn default() -> Self {
+			Self {
+				authorities: Vec::new(),
+				signature_threshold: 1,
+				keygen_threshold: 3,
+				authority_ids: Vec::new(),
+			}
+		}
+	}
+
 	#[pallet::genesis_build]
 	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
@@ -781,6 +791,7 @@ pub mod pallet {
 				self.authority_ids.len() >= self.keygen_threshold as usize,
 				"Not enough authority ids specified"
 			);
+
 			// Set thresholds to be the same
 			SignatureThreshold::<T>::put(self.signature_threshold);
 			KeygenThreshold::<T>::put(self.keygen_threshold);

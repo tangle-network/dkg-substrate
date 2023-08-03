@@ -314,13 +314,13 @@ const PHRASE: &str = "news slush supreme milk chapter athlete soap sausage put c
 
 #[allow(dead_code)]
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	let t = RuntimeGenesisConfig::default().build_storage().unwrap();
+	let t = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
 	t.into()
 }
 
 #[allow(dead_code)]
 pub fn new_test_ext_benchmarks() -> sp_io::TestExternalities {
-	let t = RuntimeGenesisConfig::default().build_storage().unwrap();
+	let t = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
 	let mut t_ext = sp_io::TestExternalities::from(t);
 	let keystore = MemoryKeystore::new();
 	t_ext.register_extension(KeystoreExt(Arc::new(keystore)));

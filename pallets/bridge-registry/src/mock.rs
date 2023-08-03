@@ -97,7 +97,7 @@ impl pallet_bridge_registry::Config for Test {
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	let mut storage = RuntimeGenesisConfig::default().build_storage().unwrap();
+	let mut storage = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
 	let _ = pallet_balances::GenesisConfig::<Test> {
 		balances: vec![
 			(AccountId32::new([1u8; 32]), 10u128.pow(18)),
