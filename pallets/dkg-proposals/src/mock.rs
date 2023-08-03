@@ -372,7 +372,7 @@ pub struct ExtBuilder;
 impl ExtBuilder {
 	pub fn build() -> sp_io::TestExternalities {
 		let dkg_id = PalletId(*b"dw/dkgac").into_account_truncating();
-		let mut t = RuntimeGenesisConfig::default().build_storage().unwrap();
+		let mut t = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
 		pallet_balances::GenesisConfig::<Test> { balances: vec![(dkg_id, ENDOWED_BALANCE)] }
 			.assimilate_storage(&mut t)
 			.unwrap();
@@ -382,7 +382,7 @@ impl ExtBuilder {
 	}
 
 	pub fn with_genesis_collators() -> sp_io::TestExternalities {
-		let mut t = RuntimeGenesisConfig::default().build_storage().unwrap();
+		let mut t = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
 		let candidates = vec![
 			(mock_pub_key(PROPOSER_A), mock_dkg_id(PROPOSER_A), 1000),
 			(mock_pub_key(PROPOSER_B), mock_dkg_id(PROPOSER_B), 1000),

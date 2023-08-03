@@ -243,7 +243,7 @@ pub fn new_test_ext_raw_authorities(authorities: Vec<(AccountId, DKGId)>) -> Tes
 		authorities: authorities.clone().into_iter().map(|(_, id)| id).collect(),
 		signature_threshold: 1,
 		keygen_threshold: 3,
-		authority_ids: authorities.into_iter().map(|(acc, id)| acc).collect(),
+		authority_ids: authorities.into_iter().map(|(acc, _id)| acc).collect(),
 	}
 	.assimilate_storage(&mut t)
 	.unwrap();
