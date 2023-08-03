@@ -113,7 +113,10 @@ use frame_support::{
 	traits::{EstimateNextSessionRotation, OneSessionHandler},
 	BoundedVec,
 };
-use frame_system::offchain::{Signer, SubmitTransaction};
+use frame_system::{
+	offchain::{Signer, SubmitTransaction},
+	pallet_prelude::BlockNumberFor,
+};
 pub use pallet::*;
 use sp_io::hashing::keccak_256;
 use sp_runtime::{
@@ -125,7 +128,6 @@ use sp_runtime::{
 	traits::{AtLeast32BitUnsigned, Convert, IsMember, One, Saturating, Zero},
 	DispatchError, Permill, RuntimeAppPublic,
 };
-use frame_system::pallet_prelude::BlockNumberFor;
 use sp_std::{
 	collections::btree_map::BTreeMap,
 	convert::{TryFrom, TryInto},
@@ -135,7 +137,7 @@ use sp_std::{
 	prelude::*,
 	vec,
 };
-use frame_support::traits::GenesisBuild;
+
 use types::RoundMetadata;
 use weights::WeightInfo;
 
@@ -645,6 +647,7 @@ pub mod pallet {
 		StorageValue<_, RefreshProposal, OptionQuery>;
 
 	#[pallet::genesis_config]
+	#[derive(frame_support::DefaultNoBound)]
 	pub struct GenesisConfig<T: Config> {
 		pub authorities: Vec<T::DKGId>,
 		pub keygen_threshold: u16,
@@ -766,20 +769,8 @@ pub mod pallet {
 		AuthorityUnJailed { authority: T::DKGId },
 	}
 
-	#[cfg(feature = "std")]
-	impl<T: Config> Default for GenesisConfig<T> {
-		fn default() -> Self {
-			Self {
-				authorities: Vec::new(),
-				signature_threshold: 1,
-				keygen_threshold: 3,
-				authority_ids: Vec::new(),
-			}
-		}
-	}
-
 	#[pallet::genesis_build]
-	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
+	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
 			assert!(
 				self.signature_threshold < self.keygen_threshold,
@@ -1955,7 +1946,9 @@ impl<T: Config> Pallet<T> {
 	/// We require the respective threshold of submissions of the same
 	/// DKG public key to be submitted in order to modify the on-chain
 	/// storage.
-	fn submit_genesis_public_key_onchain(block_number: BlockNumberFor<T>) -> Result<(), &'static str> {
+	fn submit_genesis_public_key_onchain(
+		block_number: BlockNumberFor<T>,
+	) -> Result<(), &'static str> {
 		let next_unsigned_at = <NextUnsignedAt<T>>::get();
 		if next_unsigned_at > block_number {
 			return Err("Too early to send unsigned transaction")
@@ -2344,10 +2337,7 @@ impl<
 }
 
 impl<
-		BlockNumber: AtLeast32BitUnsigned
-			+ Clone
-			+ core::fmt::Debug
-			+ sp_std::convert::From<BlockNumberFor<T>>,
+		BlockNumber: AtLeast32BitUnsigned + Clone + core::fmt::Debug + sp_std::convert::From<BlockNumberFor<T>>,
 		Period: Get<BlockNumber>,
 		Offset: Get<BlockNumber>,
 		T: Config + pallet_session::Config,

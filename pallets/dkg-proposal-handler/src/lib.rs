@@ -117,8 +117,11 @@ use frame_support::{
 	pallet_prelude::*,
 	traits::{ValidatorSet, ValidatorSetWithIdentification},
 };
-use frame_support::traits::GenesisBuild;
-use frame_system::offchain::{AppCrypto, SendSignedTransaction, SignMessage, Signer};
+
+use frame_system::{
+	offchain::{AppCrypto, SendSignedTransaction, SignMessage, Signer},
+	pallet_prelude::BlockNumberFor,
+};
 pub use pallet::*;
 use sp_runtime::{
 	offchain::{
@@ -131,7 +134,6 @@ use sp_staking::{
 	offence::{DisableStrategy, Kind, Offence, ReportOffence},
 	SessionIndex,
 };
-use frame_system::pallet_prelude::BlockNumberFor;
 use sp_std::{convert::TryInto, vec::Vec};
 use webb_proposals::Proposal;
 pub use weights::WeightInfo;

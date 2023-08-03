@@ -112,6 +112,7 @@ std = [
 	"sp-staking/std",
 	"cumulus-primitives-core/std",
 	"pallet-utility/std",
+	"frame-benchmarking/std",
 
 	# DKG dependencies
 	"dkg-runtime-primitives/std",

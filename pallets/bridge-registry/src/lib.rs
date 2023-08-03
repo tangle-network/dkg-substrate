@@ -55,7 +55,7 @@ use weights::WeightInfo;
 use types::*;
 
 use sp_std::{convert::TryInto, prelude::*, vec};
-use frame_support::traits::GenesisBuild;
+
 use frame_support::pallet_prelude::{ensure, DispatchError};
 use sp_runtime::traits::{AtLeast32Bit, One, Zero};
 use webb_proposals::{evm::AnchorUpdateProposal, Proposal, ProposalKind, ResourceId};
@@ -94,13 +94,13 @@ pub mod pallet {
 		/// Maximum number of additional fields that may be stored in a bridge's metadata. Needed to
 		/// bound the I/O required to access an identity, but can be pretty high.
 		#[pallet::constant]
-		type MaxAdditionalFields: Get<u32>;
+		type MaxAdditionalFields: Get<u32> + MaybeSerializeDeserialize;
 
 		/// Maximum number of resources that may be stored in a bridge. This is not to be confused
 		/// with the actual maximum supported by the bridge. Needed to bound the I/O
 		/// required to access a metadata object, but can be pretty high.
 		#[pallet::constant]
-		type MaxResources: Get<u32>;
+		type MaxResources: Get<u32> + MaybeSerializeDeserialize;
 
 		/// Max length of a proposal
 		#[pallet::constant]
@@ -111,20 +111,14 @@ pub mod pallet {
 	}
 
 	#[pallet::genesis_config]
+	#[derive(frame_support::DefaultNoBound)]
 	pub struct GenesisConfig<T: Config> {
 		pub phantom: PhantomData<T>,
 		pub bridges: Vec<BridgeMetadata<T::MaxResources, T::MaxAdditionalFields>>,
 	}
 
-	#[cfg(feature = "std")]
-	impl<T: Config> Default for GenesisConfig<T> {
-		fn default() -> Self {
-			Self { phantom: Default::default(), bridges: Default::default() }
-		}
-	}
-
 	#[pallet::genesis_build]
-	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
+	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
 			NextBridgeIndex::<T>::put(T::BridgeIndex::one());
 			for bridge in &self.bridges {

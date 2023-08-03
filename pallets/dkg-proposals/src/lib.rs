@@ -106,7 +106,7 @@ use frame_support::{
 	BoundedVec,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
-use frame_support::traits::GenesisBuild;
+
 use sp_runtime::{traits::Convert, RuntimeAppPublic};
 use sp_std::prelude::*;
 use types::{ProposalStatus, ProposalVotes};
@@ -359,6 +359,7 @@ pub mod pallet {
 	}
 
 	#[pallet::genesis_config]
+	#[derive(frame_support::DefaultNoBound)]
 	pub struct GenesisConfig<T: Config> {
 		/// Typed ChainId (chain type, chain id)
 		pub initial_chain_ids: Vec<[u8; 6]>,
@@ -366,19 +367,8 @@ pub mod pallet {
 		pub initial_proposers: Vec<T::AccountId>,
 	}
 
-	#[cfg(feature = "std")]
-	impl<T: Config> Default for GenesisConfig<T> {
-		fn default() -> Self {
-			Self {
-				initial_chain_ids: Default::default(),
-				initial_r_ids: Default::default(),
-				initial_proposers: Default::default(),
-			}
-		}
-	}
-
 	#[pallet::genesis_build]
-	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
+	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
 			for bytes in self.initial_chain_ids.iter() {
 				let mut chain_id_bytes = [0u8; TypedChainId::LENGTH];
