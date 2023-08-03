@@ -20,13 +20,14 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
+use serde::{Serialize, Deserialize};
 use codec::{Decode, Encode, MaxEncodedLen};
 use dkg_runtime_primitives::{
 	MaxAuthorities, MaxKeyLength, MaxProposalLength, MaxReporters, MaxSignatureLength, TypedChainId,
 };
 use frame_election_provider_support::{onchain, SequentialPhragmen, VoteWeight};
 use frame_support::{
-	traits::{ConstU16, ConstU32, Everything, U128CurrencyToVote},
+	traits::{ConstU16, ConstU32, Everything, ConstBool},
 	weights::{constants::WEIGHT_REF_TIME_PER_SECOND, ConstantMultiplier},
 };
 #[cfg(any(feature = "std", test))]
@@ -201,15 +202,14 @@ impl frame_system::Config for Runtime {
 	type BaseCallFilter = Everything;
 	type BlockHashCount = BlockHashCount;
 	type BlockLength = RuntimeBlockLength;
-	type BlockNumber = BlockNumber;
+	type Block = Block;
 	type BlockWeights = RuntimeBlockWeights;
 	type RuntimeCall = RuntimeCall;
 	type DbWeight = RocksDbWeight;
 	type RuntimeEvent = RuntimeEvent;
 	type Hash = Hash;
+	type Nonce = u64;
 	type Hashing = BlakeTwo256;
-	type Header = generic::Header<BlockNumber, BlakeTwo256>;
-	type Index = Index;
 	type Lookup = Indices;
 	type MaxConsumers = frame_support::traits::ConstU32<16>;
 	type OnKilledAccount = ();
@@ -231,6 +231,7 @@ parameter_types! {
 	pub const FieldDeposit: Balance = deposit(0, 66);
 	pub const SubAccountDeposit: Balance = deposit(1, 53);
 	pub const MaxSubAccounts: u32 = 100;
+	#[derive(Serialize, Deserialize)]
 	pub const MaxAdditionalFields: u32 = 100;
 	pub const MaxRegistrars: u32 = 20;
 }
@@ -263,6 +264,7 @@ impl pallet_aura::Config for Runtime {
 	type AuthorityId = AuraId;
 	type DisabledValidators = ();
 	type MaxAuthorities = MaxAuthorities;
+	type AllowMultipleBlocksPerSlot = ConstBool<false>;
 }
 
 impl pallet_grandpa::Config for Runtime {
@@ -352,7 +354,7 @@ impl pallet_staking::Config for Runtime {
 	type Currency = Balances;
 	type CurrencyBalance = Balance;
 	type UnixTime = Timestamp;
-	type CurrencyToVote = U128CurrencyToVote;
+	type CurrencyToVote = sp_staking::currency_to_vote::U128CurrencyToVote;
 	type RewardRemainder = ();
 	type RuntimeEvent = RuntimeEvent;
 	type Slash = ();
@@ -371,7 +373,7 @@ impl pallet_staking::Config for Runtime {
 	type GenesisElectionProvider = onchain::OnChainExecution<OnChainSeqPhragmen>;
 	type VoterList = BagsList;
 	type MaxUnlockingChunks = ConstU32<32>;
-	type OnStakerSlash = NominationPools;
+	type EventListeners = NominationPools;
 	type HistoryDepth = HistoryDepth;
 	type WeightInfo = pallet_staking::weights::SubstrateWeight<Runtime>;
 	type BenchmarkingConfig = StakingBenchmarkingConfig;
@@ -558,10 +560,10 @@ impl pallet_balances::Config for Runtime {
 	type DustRemoval = ();
 	type ExistentialDeposit = ExistentialDeposit;
 	type AccountStore = System;
-	type HoldIdentifier = ();
 	type MaxHolds = ();
 	type FreezeIdentifier = ();
 	type MaxFreezes = ();
+	type RuntimeHoldReason = RuntimeHoldReason;
 	type WeightInfo = pallet_balances::weights::SubstrateWeight<Runtime>;
 }
 
@@ -660,7 +662,7 @@ impl pallet_offences::Config for Runtime {
 parameter_types! {
 	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
 	pub const MaxVotes : u32 = 100;
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, Serialize, Deserialize)]
 	pub const MaxResources : u32 = 1000;
 	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
 	pub const MaxProposers : u32 = 1000;
@@ -767,7 +769,6 @@ impl pallet_im_online::Config for Runtime {
 	type WeightInfo = pallet_im_online::weights::SubstrateWeight<Runtime>;
 	type MaxKeys = MaxKeys;
 	type MaxPeerInHeartbeats = MaxPeerInHeartbeats;
-	type MaxPeerDataEncodingSize = MaxPeerDataEncodingSize;
 }
 
 impl pallet_utility::Config for Runtime {
