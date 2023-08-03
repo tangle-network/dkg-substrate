@@ -38,6 +38,9 @@ frame-support = { workspace = true }
 default = ["std"]
 std = [
 	"codec/std",
+	"ethabi/std",
+	"ethereum/std",
+	"ethereum-types/std",
 	"scale-info/std",
 	"webb-proposals/std",
 	"sp-io/std",

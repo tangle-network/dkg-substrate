@@ -24,7 +24,7 @@ impl<T: Config> Pallet<T> {
 	// ** Calculate the turn of authorities to submit transactions **
 	// we use a simple round robin algorithm to determine who submits the proposal on-chain, this
 	// avoids all the validators trying to submit at the same time.
-	pub(crate) fn get_expected_signer(block_number: T::BlockNumber) -> Option<T::AccountId> {
+	pub(crate) fn get_expected_signer(block_number: BlockNumberFor<T>) -> Option<T::AccountId> {
 		let current_authorities = pallet_dkg_metadata::CurrentAuthoritiesAccounts::<T>::get();
 		let block_as_u32: u32 = block_number.try_into().unwrap_or_default();
 
@@ -141,7 +141,7 @@ impl<T: Config> Pallet<T> {
 	/// for submission. This function polls all relevant proposals ready for submission at the
 	/// current block number
 	pub(crate) fn submit_signed_proposal_onchain(
-		block_number: T::BlockNumber,
+		block_number: BlockNumberFor<T>,
 	) -> Result<(), &'static str> {
 		// ensure we have the signer setup
 		let signer = Signer::<T, <T as Config>::OffChainAuthId>::all_accounts();
@@ -348,7 +348,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	pub fn on_idle_remove_expired_batches(
-		now: T::BlockNumber,
+		now: BlockNumberFor<T>,
 		mut remaining_weight: Weight,
 	) -> Weight {
 		use dkg_runtime_primitives::DKGPayloadKey::RefreshProposal;

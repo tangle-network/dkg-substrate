@@ -24,7 +24,7 @@ scale-info = { workspace = true }
 curv = { workspace = true }
 
 codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive"] }
-prometheus = { package = "substrate-prometheus-endpoint", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+prometheus = { package = "substrate-prometheus-endpoint", git = "https://github.com/paritytech/substrate", branch = "polkadot-v1.0.0" }
 
 sp-api = { workspace = true }
 sp-application-crypto = { workspace = true }
@@ -43,7 +43,6 @@ sc-keystore = { workspace = true }
 sc-network = { workspace = true }
 sc-network-common = { workspace = true }
 sc-network-sync = { workspace = true }
-sc-peerset = { workspace = true }
 
 round-based = { workspace = true }
 serde = { workspace = true }

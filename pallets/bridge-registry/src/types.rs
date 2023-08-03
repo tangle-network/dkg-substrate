@@ -39,8 +39,9 @@ use sp_std::prelude::*;
 	PartialEqNoBound,
 	RuntimeDebugNoBound,
 	TypeInfo,
+	serde::Serialize,
+	serde::Deserialize,
 )]
-#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
 #[codec(mel_bound())]
 #[scale_info(skip_type_params(FieldLimit))]
 pub struct BridgeInfo<FieldLimit: Get<u32>> {
@@ -70,12 +71,11 @@ pub struct BridgeInfo<FieldLimit: Get<u32>> {
 )]
 pub struct SerdeData(Data);
 
-#[cfg(feature = "std")]
 mod serde_ {
 	use super::*;
 	use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 	struct DataVisitor;
-	use std::{fmt::Formatter, str::FromStr};
+	use sp_std::{fmt::Formatter, str::FromStr};
 
 	impl FromStr for SerdeData {
 		type Err = ();
@@ -130,9 +130,16 @@ mod serde_ {
 /// NOTE: This is stored separately primarily to facilitate the addition of extra fields in a
 /// backwards compatible way through a specialized `Decode` impl.
 #[derive(
-	CloneNoBound, Encode, Eq, MaxEncodedLen, PartialEqNoBound, RuntimeDebugNoBound, TypeInfo,
+	CloneNoBound,
+	Encode,
+	Eq,
+	MaxEncodedLen,
+	PartialEqNoBound,
+	RuntimeDebugNoBound,
+	TypeInfo,
+	serde::Serialize,
+	serde::Deserialize,
 )]
-#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
 #[codec(mel_bound())]
 #[scale_info(skip_type_params(MaxResources, MaxAdditionalFields))]
 pub struct BridgeMetadata<MaxResources: Get<u32>, MaxAdditionalFields: Get<u32>> {

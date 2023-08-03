@@ -105,6 +105,7 @@ use frame_support::{
 	traits::{EnsureOrigin, EstimateNextSessionRotation, Get},
 	BoundedVec,
 };
+use frame_system::pallet_prelude::BlockNumberFor;
 
 use sp_runtime::{traits::Convert, RuntimeAppPublic};
 use sp_std::prelude::*;
@@ -150,7 +151,7 @@ pub mod pallet {
 		type AdminOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 
 		/// Estimate next session rotation
-		type NextSessionRotation: EstimateNextSessionRotation<Self::BlockNumber>;
+		type NextSessionRotation: EstimateNextSessionRotation<BlockNumberFor<Self>>;
 
 		/// Authority identifier type
 		type DKGId: Member + Parameter + RuntimeAppPublic + MaybeSerializeDeserialize;
@@ -173,11 +174,11 @@ pub mod pallet {
 		type ChainIdentifier: Get<TypedChainId>;
 
 		#[pallet::constant]
-		type ProposalLifetime: Get<Self::BlockNumber>;
+		type ProposalLifetime: Get<BlockNumberFor<Self>>;
 
 		/// The session period
 		#[pallet::constant]
-		type Period: Get<Self::BlockNumber>;
+		type Period: Get<BlockNumberFor<Self>>;
 
 		/// The max votes to store for for and against
 		#[pallet::constant]
@@ -256,7 +257,7 @@ pub mod pallet {
 		TypedChainId,
 		Blake2_256,
 		(ProposalNonce, ProposalOf<T>),
-		ProposalVotes<T::AccountId, T::BlockNumber, T::MaxVotes>,
+		ProposalVotes<T::AccountId, BlockNumberFor<T>, T::MaxVotes>,
 	>;
 
 	/// Utilized by the bridge software to map resource IDs to actual methods
@@ -358,6 +359,7 @@ pub mod pallet {
 	}
 
 	#[pallet::genesis_config]
+	#[derive(frame_support::DefaultNoBound)]
 	pub struct GenesisConfig<T: Config> {
 		/// Typed ChainId (chain type, chain id)
 		pub initial_chain_ids: Vec<[u8; 6]>,
@@ -365,19 +367,8 @@ pub mod pallet {
 		pub initial_proposers: Vec<T::AccountId>,
 	}
 
-	#[cfg(feature = "std")]
-	impl<T: Config> Default for GenesisConfig<T> {
-		fn default() -> Self {
-			Self {
-				initial_chain_ids: Default::default(),
-				initial_r_ids: Default::default(),
-				initial_proposers: Default::default(),
-			}
-		}
-	}
-
 	#[pallet::genesis_build]
-	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
+	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
 			for bytes in self.initial_chain_ids.iter() {
 				let mut chain_id_bytes = [0u8; TypedChainId::LENGTH];
@@ -629,7 +620,7 @@ impl<T: Config> Pallet<T> {
 			Some(v) => v,
 			None => ProposalVotes::<
 				<T as frame_system::Config>::AccountId,
-				<T as frame_system::Config>::BlockNumber,
+				BlockNumberFor<T>,
 				<T as Config>::MaxVotes,
 			> {
 				expiry: now + T::ProposalLifetime::get(),

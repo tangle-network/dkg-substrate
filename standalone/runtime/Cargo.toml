@@ -19,7 +19,7 @@ pallet-dkg-metadata = { workspace = true }
 pallet-dkg-proposals = { workspace = true }
 pallet-dkg-proposal-handler = { workspace = true }
 pallet-bridge-registry = { workspace = true }
-
+serde = { workspace = true }
 codec = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 scale-info = { workspace = true }
 
@@ -112,6 +112,7 @@ std = [
 	"sp-staking/std",
 	"cumulus-primitives-core/std",
 	"pallet-utility/std",
+	"frame-benchmarking/std",
 
 	# DKG dependencies
 	"dkg-runtime-primitives/std",

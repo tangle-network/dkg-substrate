@@ -19,7 +19,11 @@ pub use dkg_runtime_primitives::{
 	crypto::AuthorityId as DKGId, ConsensusLog, MaxAuthorities, MaxKeyLength, MaxReporters,
 	MaxSignatureLength, DKG_ENGINE_ID,
 };
-use frame_support::{parameter_types, traits::Everything, BoundedVec, PalletId};
+use frame_support::{
+	parameter_types,
+	traits::{ConstBool, Everything},
+	BoundedVec, PalletId,
+};
 use frame_system as system;
 use frame_system::EnsureRoot;
 use pallet_dkg_proposals::DKGEcdsaToEthereumAddress;
@@ -27,12 +31,12 @@ use pallet_session::historical as pallet_session_historical;
 use sp_core::{sr25519::Signature, H256};
 use sp_runtime::{
 	impl_opaque_keys,
-	testing::{Header, TestXt},
+	testing::TestXt,
 	traits::{
 		BlakeTwo256, ConvertInto, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup,
 		OpaqueKeys, Verify,
 	},
-	Percent, Permill,
+	BuildStorage, Percent, Permill,
 };
 use sp_staking::{
 	offence::{OffenceError, ReportOffence},
@@ -54,9 +58,6 @@ use dkg_runtime_primitives::{EIP2930Transaction, TransactionAction, U256};
 use std::sync::Arc;
 use webb_proposals::{Proposal, ProposalKind};
 
-type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
-type Block = frame_system::mocking::MockBlock<Test>;
-
 impl_opaque_keys! {
 	pub struct MockSessionKeys {
 		pub dummy: pallet_dkg_metadata::Pallet<Test>,
@@ -65,19 +66,16 @@ impl_opaque_keys! {
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
-	pub enum Test where
-		Block = Block,
-		NodeBlock = Block,
-		UncheckedExtrinsic = UncheckedExtrinsic,
+	pub enum Test
 	{
-		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
+		System: frame_system,
 		Session: pallet_session,
 		DKG: pallet_dkg_metadata,
-		Balances: pallet_balances::{Pallet, Call, Storage, Event<T>},
-		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
-		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
-		Aura: pallet_aura::{Pallet, Storage, Config<T>},
-		Historical: pallet_session_historical::{Pallet},
+		Balances: pallet_balances,
+		DKGProposals: pallet_dkg_proposals,
+		DKGProposalHandler: pallet_dkg_proposal_handler,
+		Aura: pallet_aura,
+		Historical: pallet_session_historical,
 	}
 );
 
@@ -85,6 +83,7 @@ impl pallet_aura::Config for Test {
 	type AuthorityId = sp_consensus_aura::sr25519::AuthorityId;
 	type DisabledValidators = ();
 	type MaxAuthorities = MaxAuthorities;
+	type AllowMultipleBlocksPerSlot = ConstBool<false>;
 }
 
 parameter_types! {
@@ -107,13 +106,12 @@ impl system::Config for Test {
 	type DbWeight = ();
 	type RuntimeOrigin = RuntimeOrigin;
 	type RuntimeCall = RuntimeCall;
-	type Index = u64;
-	type BlockNumber = u64;
+	type Nonce = u64;
 	type Hash = H256;
 	type Hashing = BlakeTwo256;
 	type AccountId = AccountId;
 	type Lookup = IdentityLookup<Self::AccountId>;
-	type Header = Header;
+	type Block = frame_system::mocking::MockBlock<Test>;
 	type RuntimeEvent = RuntimeEvent;
 	type BlockHashCount = BlockHashCount;
 	type Version = ();
@@ -139,8 +137,8 @@ impl pallet_balances::Config for Test {
 	type MaxLocks = ();
 	type MaxReserves = ();
 	type ReserveIdentifier = [u8; 8];
-	type HoldIdentifier = ();
 	type FreezeIdentifier = ();
+	type RuntimeHoldReason = RuntimeHoldReason;
 	type MaxHolds = ();
 	type MaxFreezes = ();
 	type WeightInfo = ();
@@ -316,13 +314,13 @@ const PHRASE: &str = "news slush supreme milk chapter athlete soap sausage put c
 
 #[allow(dead_code)]
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	let t = system::GenesisConfig::default().build_storage::<Test>().unwrap();
+	let t = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
 	t.into()
 }
 
 #[allow(dead_code)]
 pub fn new_test_ext_benchmarks() -> sp_io::TestExternalities {
-	let t = system::GenesisConfig::default().build_storage::<Test>().unwrap();
+	let t = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
 	let mut t_ext = sp_io::TestExternalities::from(t);
 	let keystore = MemoryKeystore::new();
 	t_ext.register_extension(KeystoreExt(Arc::new(keystore)));

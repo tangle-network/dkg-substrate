@@ -216,7 +216,7 @@ benchmarks! {
 		for id in 1..MAX_AUTHORITIES{
 			let dkg_id = T::DKGId::from(ecdsa::Public::from_raw([id as u8; 33]));
 			let account_id = T::AccountId::from(sr25519::Public::from_raw([id as u8; 32]));
-			let block_number: T::BlockNumber = id.into();
+			let block_number: BlockNumberFor<T> = id.into();
 			AccountToAuthority::<T>::insert(&account_id, dkg_id.clone());
 			JailedKeygenAuthorities::<T>::insert(dkg_id.clone(), block_number);
 			JailedSigningAuthorities::<T>::insert(dkg_id.clone(), block_number);
@@ -224,7 +224,7 @@ benchmarks! {
 		let caller = T::AccountId::from(sr25519::Public::from_raw([1u8; 32]));
 		let offender = T::DKGId::from(ecdsa::Public::from_raw([1u8; 33]));
 		let key_gen_sentence = T::KeygenJailSentence::get();
-		let block_number = key_gen_sentence + T::BlockNumber::from(BLOCK_NUMBER);
+		let block_number = key_gen_sentence + BlockNumberFor<T>::from(BLOCK_NUMBER);
 		frame_system::Pallet::<T>::set_block_number(block_number.into());
 	}: _(RawOrigin::Signed(caller))
 	verify {
@@ -235,7 +235,7 @@ benchmarks! {
 	force_unjail_signing {
 		for id in 1..MAX_AUTHORITIES{
 			let dkg_id = T::DKGId::from(ecdsa::Public::from_raw([id as u8; 33]));
-			let block_number: T::BlockNumber = id.into();
+			let block_number: BlockNumberFor<T> = id.into();
 			JailedSigningAuthorities::<T>::insert(dkg_id.clone(), block_number);
 		}
 		let offender = T::DKGId::from(ecdsa::Public::from_raw([1u8; 33]));
@@ -247,7 +247,7 @@ benchmarks! {
 	force_unjail_keygen {
 		for id in 1..MAX_AUTHORITIES{
 			let dkg_id = T::DKGId::from(ecdsa::Public::from_raw([id as u8; 33]));
-			let block_number: T::BlockNumber = id.into();
+			let block_number: BlockNumberFor<T> = id.into();
 			JailedKeygenAuthorities::<T>::insert(dkg_id.clone(), block_number);
 		}
 		let offender = T::DKGId::from(ecdsa::Public::from_raw([1u8; 33]));
