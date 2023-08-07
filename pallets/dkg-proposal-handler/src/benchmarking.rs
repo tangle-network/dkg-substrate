@@ -19,11 +19,12 @@ use crate::Pallet;
 use codec::Encode;
 use dkg_runtime_primitives::KEY_TYPE;
 use frame_benchmarking::{benchmarks, impl_benchmark_test_suite, whitelisted_caller};
+use frame_support::traits::Len;
 use frame_system::RawOrigin;
 use pallet_dkg_metadata::Pallet as DKGPallet;
 use sp_core::{ecdsa, H256, U256};
 use sp_io::crypto::{ecdsa_generate, ecdsa_sign_prehashed};
-use sp_std::vec::Vec;
+use sp_std::{vec, vec::Vec};
 
 use dkg_runtime_primitives::{keccak_256, EIP2930Transaction, TransactionAction, TransactionV2};
 use webb_proposals::{Proposal, ProposalKind};
@@ -51,7 +52,7 @@ pub fn mock_sign_msg(msg: &[u8; 32], pub_key: &ecdsa::Public) -> ecdsa::Signatur
 pub fn mock_signed_proposal<T: Config>(
 	eth_tx: TransactionV2,
 	pub_key: &ecdsa::Public,
-) -> Proposal<T::MaxProposalLength> {
+) -> SignedProposalBatchOf<T> {
 	let eth_tx_ser = eth_tx.encode();
 
 	let hash = keccak_256(&eth_tx_ser);
@@ -60,16 +61,19 @@ pub fn mock_signed_proposal<T: Config>(
 	let mut sig_vec: Vec<u8> = Vec::new();
 	sig_vec.extend_from_slice(&sig.0);
 
-	Proposal::Signed {
-		kind: ProposalKind::EVM,
-		data: eth_tx_ser.try_into().unwrap(),
+	let unsigned_proposal =
+		Proposal::Unsigned { kind: ProposalKind::EVM, data: eth_tx.encode().try_into().unwrap() };
+
+	SignedProposalBatchOf::<T> {
+		proposals: vec![unsigned_proposal].try_into().unwrap(),
+		batch_id: 0_u32.into(),
 		signature: sig_vec.try_into().unwrap(),
 	}
 }
 
 benchmarks! {
 	submit_signed_proposals {
-		let n in 0..(T::MaxSubmissionsPerBatch::get()).into();
+		let n in 0..(T::MaxProposalsPerBatch::get()).into();
 		let dkg_pub_key = ecdsa_generate(KEY_TYPE, None);
 		let bounded_dkg_pub_key : BoundedVec<_,_> = dkg_pub_key.encode().try_into().unwrap();
 		DKGPallet::<T>::set_dkg_public_key(bounded_dkg_pub_key);
@@ -102,18 +106,18 @@ benchmarks! {
 		assert!(Pallet::<T>::get_unsigned_proposal_batches().len() == 1);
 	}
 
-	force_remove_unsigned_proposal {
-		let buf = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 38, 87, 136, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].to_vec();
+	force_remove_unsigned_proposal_batch {
+		let tx = TransactionV2::EIP2930(mock_eth_tx_eip2930(0_u8));
 		let proposal = Proposal::Unsigned {
 			kind: ProposalKind::TokenAdd,
-			data: buf.try_into().unwrap()
+			data: tx.encode().try_into().unwrap()
 		};
 		Pallet::<T>::force_submit_unsigned_proposal(RawOrigin::Root.into(), proposal.clone()).unwrap();
-		assert!(Pallet::<T>::get_unsigned_proposals().len() == 1);
 		let prop_identifier = decode_proposal_identifier(&proposal).unwrap();
-	}: _(RawOrigin::Root, prop_identifier.typed_chain_id, prop_identifier.key)
+		assert!(Pallet::<T>::unsigned_proposal_queue(prop_identifier.typed_chain_id,<T as pallet::Config>::BatchId::from(0_u8)).len() == 1);
+	}: _(RawOrigin::Root, prop_identifier.typed_chain_id, 0_u32.into())
 	verify {
-		assert!(Pallet::<T>::get_unsigned_proposals().len() == 0);
+		assert!(Pallet::<T>::unsigned_proposal_queue(prop_identifier.typed_chain_id, <T as pallet::Config>::BatchId::from(0_u8)).len() == 0);
 	}
 
 }

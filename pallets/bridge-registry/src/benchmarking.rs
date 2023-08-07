@@ -21,18 +21,19 @@
 
 use super::*;
 
-use frame_benchmarking::{benchmarks_instance_pallet, impl_benchmark_test_suite};
+use frame_benchmarking::{benchmarks, impl_benchmark_test_suite};
+use frame_support::traits::Get;
 use frame_system::RawOrigin;
 use webb_proposals::ResourceId;
 
-benchmarks_instance_pallet! {
+benchmarks! {
 	set_metadata {
 		let bridge_index = 0_u32;
 		let metadata : BridgeInfo<T::MaxAdditionalFields> = Default::default();
 	}: _(RawOrigin::Root, bridge_index.into(), metadata)
 	verify {
 		assert_eq!(
-			Bridges::<T, I>::get::<T::BridgeIndex>(bridge_index.into()).unwrap(),
+			Bridges::<T>::get::<T::BridgeIndex>(bridge_index.into()).unwrap(),
 			BridgeMetadata {
 				resource_ids: Default::default(),
 				info: Default::default()
@@ -41,15 +42,16 @@ benchmarks_instance_pallet! {
 	}
 
 	force_reset_indices {
+		let n in 3..T::MaxResources::get();
 		let mut resource_ids : Vec<ResourceId> = vec![];
-		for i in 0..1000 {
-			resource_ids.push([0u8;32].into())
+		for i in 0..=n {
+			resource_ids.push([i as u8;32].into())
 		}
 		let bridge_index = 1_u32;
 	}: _(RawOrigin::Root, resource_ids, bridge_index.into())
 	verify {
 		assert_eq!(
-			ResourceToBridgeIndex::<T, I>::get::<ResourceId>([0u8; 32].into()).unwrap(),
+			ResourceToBridgeIndex::<T>::get::<ResourceId>([0u8; 32].into()).unwrap(),
 			bridge_index.into()
 		);
 	}

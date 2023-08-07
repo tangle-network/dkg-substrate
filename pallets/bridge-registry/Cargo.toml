@@ -44,10 +44,12 @@ std = [
     "sp-std/std",
     "webb-proposals/std",
     "pallet-identity/std",
-    "dkg-runtime-primitives/std"
+    "dkg-runtime-primitives/std",
+    "pallet-balances/std",
 ]
 runtime-benchmarks = [
   "frame-benchmarking",
   "frame-system/runtime-benchmarks",
   "frame-support/runtime-benchmarks",
+  "pallet-identity/runtime-benchmarks",
 ]
