@@ -23,35 +23,43 @@ declare module '@polkadot/api-base/types/errors' {
     };
     balances: {
       /**
-       * Beneficiary account must pre-exist
+       * Beneficiary account must pre-exist.
        **/
       DeadAccount: AugmentedError<ApiType>;
       /**
-       * Value too low to create account due to existential deposit
+       * Value too low to create account due to existential deposit.
        **/
       ExistentialDeposit: AugmentedError<ApiType>;
       /**
-       * A vesting schedule already exists for this account
+       * A vesting schedule already exists for this account.
        **/
       ExistingVestingSchedule: AugmentedError<ApiType>;
+      /**
+       * Transfer/payment would kill account.
+       **/
+      Expendability: AugmentedError<ApiType>;
       /**
        * Balance too low to send value.
        **/
       InsufficientBalance: AugmentedError<ApiType>;
       /**
-       * Transfer/payment would kill account
-       **/
-      KeepAlive: AugmentedError<ApiType>;
-      /**
-       * Account liquidity restrictions prevent withdrawal
+       * Account liquidity restrictions prevent withdrawal.
        **/
       LiquidityRestrictions: AugmentedError<ApiType>;
       /**
-       * Number of named reserves exceed MaxReserves
+       * Number of freezes exceed `MaxFreezes`.
+       **/
+      TooManyFreezes: AugmentedError<ApiType>;
+      /**
+       * Number of holds exceed `MaxHolds`.
+       **/
+      TooManyHolds: AugmentedError<ApiType>;
+      /**
+       * Number of named reserves exceed `MaxReserves`.
        **/
       TooManyReserves: AugmentedError<ApiType>;
       /**
-       * Vesting balance too high to send value
+       * Vesting balance too high to send value.
        **/
       VestingBalance: AugmentedError<ApiType>;
       /**
@@ -213,17 +221,33 @@ declare module '@polkadot/api-base/types/errors' {
        **/
       InvalidProposalBytesLength: AugmentedError<ApiType>;
       /**
+       * the signed data is invalid
+       **/
+      InvalidSignedData: AugmentedError<ApiType>;
+      /**
        * Error names should be descriptive.
        **/
       NoneValue: AugmentedError<ApiType>;
+      /**
+       * The signature does not match current active key
+       **/
+      NotSignedByCurrentDKG: AugmentedError<ApiType>;
       /**
        * Proposal with the ID has already been submitted
        **/
       ProposalAlreadyExists: AugmentedError<ApiType>;
       /**
+       * Proposal batch does not exist
+       **/
+      ProposalBatchNotFound: AugmentedError<ApiType>;
+      /**
        * No proposal with the ID was found
        **/
       ProposalDoesNotExists: AugmentedError<ApiType>;
+      /**
+       * the prposal exists on runtime and is valid
+       **/
+      ProposalExistsAndIsValid: AugmentedError<ApiType>;
       /**
        * Proposal format is invalid
        **/
@@ -574,6 +598,22 @@ declare module '@polkadot/api-base/types/errors' {
        **/
       CannotWithdrawAny: AugmentedError<ApiType>;
       /**
+       * The submitted changes to commission change rate are not allowed.
+       **/
+      CommissionChangeRateNotAllowed: AugmentedError<ApiType>;
+      /**
+       * Not enough blocks have surpassed since the last commission update.
+       **/
+      CommissionChangeThrottled: AugmentedError<ApiType>;
+      /**
+       * The supplied commission exceeds global maximum commission.
+       **/
+      CommissionExceedsGlobalMaximum: AugmentedError<ApiType>;
+      /**
+       * The supplied commission exceeds the max allowed commission.
+       **/
+      CommissionExceedsMaximum: AugmentedError<ApiType>;
+      /**
        * Some error occurred that should never happen. This should be reported to the
        * maintainers.
        **/
@@ -591,6 +631,10 @@ declare module '@polkadot/api-base/types/errors' {
        * Pool id provided is not correct/usable.
        **/
       InvalidPoolId: AugmentedError<ApiType>;
+      /**
+       * The pool's max commission cannot be set higher than the existing value.
+       **/
+      MaxCommissionRestricted: AugmentedError<ApiType>;
       /**
        * Too many members in the pool or system.
        **/
@@ -615,6 +659,14 @@ declare module '@polkadot/api-base/types/errors' {
        * permissions for the pool. Members can never unbond to a value below `MinJoinBond`.
        **/
       MinimumBondNotMet: AugmentedError<ApiType>;
+      /**
+       * No commission current has been set.
+       **/
+      NoCommissionCurrentSet: AugmentedError<ApiType>;
+      /**
+       * There is no pending commission to claim.
+       **/
+      NoPendingCommission: AugmentedError<ApiType>;
       /**
        * A pool must be in [`PoolState::Destroying`] in order for the depositor to unbond or for
        * other members to be permissionlessly unbonded.

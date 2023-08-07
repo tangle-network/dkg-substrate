@@ -117,7 +117,11 @@ use frame_support::{
 	pallet_prelude::*,
 	traits::{ValidatorSet, ValidatorSetWithIdentification},
 };
-use frame_system::offchain::{AppCrypto, SendSignedTransaction, SignMessage, Signer};
+
+use frame_system::{
+	offchain::{AppCrypto, SendSignedTransaction, SignMessage, Signer},
+	pallet_prelude::BlockNumberFor,
+};
 pub use pallet::*;
 use sp_runtime::{
 	offchain::{
@@ -174,7 +178,7 @@ pub mod pallet {
 		<T as Config>::BatchId,
 		<T as pallet_dkg_metadata::Config>::MaxProposalLength,
 		<T as Config>::MaxProposalsPerBatch,
-		<T as frame_system::Config>::BlockNumber,
+		BlockNumberFor<T>,
 	>;
 
 	pub type SignedProposalBatchOf<T> = SignedProposalBatch<
@@ -240,7 +244,7 @@ pub mod pallet {
 
 		/// Max blocks to store an unsigned proposal
 		#[pallet::constant]
-		type UnsignedProposalExpiry: Get<Self::BlockNumber>;
+		type UnsignedProposalExpiry: Get<BlockNumberFor<Self>>;
 
 		/// The origin which may forcibly reset parameters or otherwise alter
 		/// privileged attributes.
@@ -406,7 +410,7 @@ pub mod pallet {
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		fn offchain_worker(block_number: T::BlockNumber) {
+		fn offchain_worker(block_number: BlockNumberFor<T>) {
 			let res = Self::submit_signed_proposal_onchain(block_number);
 			log::debug!(
 				target: "runtime::dkg_proposal_handler",
@@ -418,7 +422,7 @@ pub mod pallet {
 		/// Hook that execute when there is leftover space in a block
 		/// This function will execute on even blocks and move any proposals
 		/// in unsigned proposals to unsigned proposal queue
-		fn on_idle(now: T::BlockNumber, mut remaining_weight: Weight) -> Weight {
+		fn on_idle(now: BlockNumberFor<T>, mut remaining_weight: Weight) -> Weight {
 			// execute on even blocks
 			if now % 2_u32.into() != 0_u32.into() {
 				return remaining_weight

@@ -155,7 +155,7 @@ impl NetworkGossipEngineBuilder {
 
 #[allow(unused)]
 mod rep {
-	use sc_peerset::ReputationChange as Rep;
+	use sc_network::ReputationChange as Rep;
 	/// Reputation change when a peer sends us a message that we didn't know about.
 	pub const GOOD_MESSAGE: Rep = Rep::new(1 << 7, "Good message");
 	/// We received an unexpected message packet.

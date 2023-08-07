@@ -44,6 +44,7 @@ std = [
     "sp-std/std",
     "webb-proposals/std",
     "pallet-identity/std",
+    "dkg-runtime-primitives/std"
 ]
 runtime-benchmarks = [
   "frame-benchmarking",

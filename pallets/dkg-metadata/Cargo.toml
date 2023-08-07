@@ -52,5 +52,6 @@ std = [
 	"frame-support/std",
 	"frame-system/std",
 	"libsecp256k1/std",
-	"pallet-session/std"
+	"pallet-session/std",
+	"webb-proposals/std",
 ]

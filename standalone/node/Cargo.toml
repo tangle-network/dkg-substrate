@@ -23,6 +23,7 @@ rand = { workspace = true }
 hex-literal = { workspace = true }
 
 sc-cli = { workspace = true }
+sc-offchain = { workspace = true }
 sp-core = { workspace = true }
 sc-executor = { workspace = true }
 sc-service = { workspace = true }

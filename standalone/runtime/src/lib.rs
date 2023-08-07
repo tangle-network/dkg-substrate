@@ -26,7 +26,7 @@ use dkg_runtime_primitives::{
 };
 use frame_election_provider_support::{onchain, SequentialPhragmen, VoteWeight};
 use frame_support::{
-	traits::{ConstU16, ConstU32, Everything, U128CurrencyToVote},
+	traits::{ConstBool, ConstU16, ConstU32, Everything},
 	weights::{constants::WEIGHT_REF_TIME_PER_SECOND, ConstantMultiplier},
 };
 #[cfg(any(feature = "std", test))]
@@ -44,6 +44,7 @@ use pallet_session::historical as pallet_session_historical;
 #[cfg(any(feature = "std", test))]
 pub use pallet_staking::StakerStatus;
 pub use pallet_transaction_payment::{CurrencyAdapter, Multiplier, TargetedFeeAdjustment};
+use serde::{Deserialize, Serialize};
 use sp_api::impl_runtime_apis;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
@@ -101,7 +102,7 @@ pub type CheckedExtrinsic = generic::CheckedExtrinsic<AccountId, RuntimeCall, Si
 pub type SignedPayload = generic::SignedPayload<RuntimeCall, SignedExtra>;
 
 /// Index of a transaction in the chain.
-pub type Index = u32;
+pub type Nonce = u32;
 
 /// A hash of some data used by the chain.
 pub type Hash = sp_core::H256;
@@ -201,15 +202,14 @@ impl frame_system::Config for Runtime {
 	type BaseCallFilter = Everything;
 	type BlockHashCount = BlockHashCount;
 	type BlockLength = RuntimeBlockLength;
-	type BlockNumber = BlockNumber;
+	type Block = Block;
 	type BlockWeights = RuntimeBlockWeights;
 	type RuntimeCall = RuntimeCall;
 	type DbWeight = RocksDbWeight;
 	type RuntimeEvent = RuntimeEvent;
 	type Hash = Hash;
+	type Nonce = Nonce;
 	type Hashing = BlakeTwo256;
-	type Header = generic::Header<BlockNumber, BlakeTwo256>;
-	type Index = Index;
 	type Lookup = Indices;
 	type MaxConsumers = frame_support::traits::ConstU32<16>;
 	type OnKilledAccount = ();
@@ -231,6 +231,7 @@ parameter_types! {
 	pub const FieldDeposit: Balance = deposit(0, 66);
 	pub const SubAccountDeposit: Balance = deposit(1, 53);
 	pub const MaxSubAccounts: u32 = 100;
+	#[derive(Serialize, Deserialize)]
 	pub const MaxAdditionalFields: u32 = 100;
 	pub const MaxRegistrars: u32 = 20;
 }
@@ -263,6 +264,7 @@ impl pallet_aura::Config for Runtime {
 	type AuthorityId = AuraId;
 	type DisabledValidators = ();
 	type MaxAuthorities = MaxAuthorities;
+	type AllowMultipleBlocksPerSlot = ConstBool<false>;
 }
 
 impl pallet_grandpa::Config for Runtime {
@@ -352,7 +354,7 @@ impl pallet_staking::Config for Runtime {
 	type Currency = Balances;
 	type CurrencyBalance = Balance;
 	type UnixTime = Timestamp;
-	type CurrencyToVote = U128CurrencyToVote;
+	type CurrencyToVote = sp_staking::currency_to_vote::U128CurrencyToVote;
 	type RewardRemainder = ();
 	type RuntimeEvent = RuntimeEvent;
 	type Slash = ();
@@ -371,7 +373,7 @@ impl pallet_staking::Config for Runtime {
 	type GenesisElectionProvider = onchain::OnChainExecution<OnChainSeqPhragmen>;
 	type VoterList = BagsList;
 	type MaxUnlockingChunks = ConstU32<32>;
-	type OnStakerSlash = NominationPools;
+	type EventListeners = NominationPools;
 	type HistoryDepth = HistoryDepth;
 	type WeightInfo = pallet_staking::weights::SubstrateWeight<Runtime>;
 	type BenchmarkingConfig = StakingBenchmarkingConfig;
@@ -558,10 +560,10 @@ impl pallet_balances::Config for Runtime {
 	type DustRemoval = ();
 	type ExistentialDeposit = ExistentialDeposit;
 	type AccountStore = System;
-	type HoldIdentifier = ();
 	type MaxHolds = ();
 	type FreezeIdentifier = ();
 	type MaxFreezes = ();
+	type RuntimeHoldReason = RuntimeHoldReason;
 	type WeightInfo = pallet_balances::weights::SubstrateWeight<Runtime>;
 }
 
@@ -660,7 +662,7 @@ impl pallet_offences::Config for Runtime {
 parameter_types! {
 	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
 	pub const MaxVotes : u32 = 100;
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, Serialize, Deserialize)]
 	pub const MaxResources : u32 = 1000;
 	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
 	pub const MaxProposers : u32 = 1000;
@@ -692,7 +694,7 @@ where
 		call: RuntimeCall,
 		public: <Signature as traits::Verify>::Signer,
 		account: AccountId,
-		nonce: Index,
+		nonce: Nonce,
 	) -> Option<(RuntimeCall, <UncheckedExtrinsic as traits::Extrinsic>::SignaturePayload)> {
 		let tip = 0;
 		// take the biggest period possible.
@@ -721,7 +723,7 @@ where
 			})
 			.ok()?;
 		let signature = raw_payload.using_encoded(|payload| C::sign(payload, public))?;
-		let address = AccountIdLookup::<AccountId, Index>::unlookup(account);
+		let address = AccountIdLookup::<AccountId, Nonce>::unlookup(account);
 		let (call, extra, _) = raw_payload.deconstruct();
 		Some((call, (address, signature, extra)))
 	}
@@ -767,7 +769,6 @@ impl pallet_im_online::Config for Runtime {
 	type WeightInfo = pallet_im_online::weights::SubstrateWeight<Runtime>;
 	type MaxKeys = MaxKeys;
 	type MaxPeerInHeartbeats = MaxPeerInHeartbeats;
-	type MaxPeerDataEncodingSize = MaxPeerDataEncodingSize;
 }
 
 impl pallet_utility::Config for Runtime {
@@ -779,39 +780,35 @@ impl pallet_utility::Config for Runtime {
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
-  pub enum Runtime where
-	Block = Block,
-	NodeBlock = opaque::Block,
-	UncheckedExtrinsic = UncheckedExtrinsic
-  {
-	System: frame_system,
-	Indices: pallet_indices,
-	RandomnessCollectiveFlip: pallet_randomness_collective_flip,
-	Timestamp: pallet_timestamp,
-	Aura: pallet_aura,
-	Grandpa: pallet_grandpa,
-	Balances: pallet_balances,
-	DKG: pallet_dkg_metadata,
-	DKGProposals: pallet_dkg_proposals,
-	DKGProposalHandler: pallet_dkg_proposal_handler,
-	TransactionPayment: pallet_transaction_payment,
-	Sudo: pallet_sudo,
-	ElectionProviderMultiPhase: pallet_election_provider_multi_phase,
-	BagsList: pallet_bags_list,
-	NominationPools: pallet_nomination_pools,
-	Offences: pallet_offences,
-	Staking: pallet_staking,
-	Session: pallet_session,
-	Historical: pallet_session_historical,
-	BridgeRegistry: pallet_bridge_registry,
-	Identity: pallet_identity::{Pallet, Call, Storage, Event<T>},
-	ImOnline: pallet_im_online,
-	Utility: pallet_utility
+	pub struct Runtime {
+		System: frame_system,
+		Indices: pallet_indices,
+		RandomnessCollectiveFlip: pallet_randomness_collective_flip,
+		Timestamp: pallet_timestamp,
+		Aura: pallet_aura,
+		Grandpa: pallet_grandpa,
+		Balances: pallet_balances,
+		DKG: pallet_dkg_metadata,
+		DKGProposals: pallet_dkg_proposals,
+		DKGProposalHandler: pallet_dkg_proposal_handler,
+		TransactionPayment: pallet_transaction_payment,
+		Sudo: pallet_sudo,
+		ElectionProviderMultiPhase: pallet_election_provider_multi_phase,
+		BagsList: pallet_bags_list,
+		NominationPools: pallet_nomination_pools,
+		Offences: pallet_offences,
+		Staking: pallet_staking,
+		Session: pallet_session,
+		Historical: pallet_session_historical,
+		BridgeRegistry: pallet_bridge_registry,
+		Identity: pallet_identity::{Pallet, Call, Storage, Event<T>},
+		ImOnline: pallet_im_online,
+		Utility: pallet_utility
   }
 );
 
 /// The address format for describing accounts.
-pub type Address = sp_runtime::MultiAddress<AccountId, Index>;
+pub type Address = sp_runtime::MultiAddress<AccountId, Nonce>;
 /// Block header type as expected by this runtime.
 pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
 /// Block type as expected by this runtime.
@@ -1054,8 +1051,8 @@ impl_runtime_apis! {
 	}
   }
 
-  impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Index> for Runtime {
-	fn account_nonce(account: AccountId) -> Index {
+  impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Nonce> for Runtime {
+	fn account_nonce(account: AccountId) -> Nonce {
 	  System::account_nonce(account)
 	}
   }
