@@ -224,7 +224,7 @@ benchmarks! {
 		let caller = T::AccountId::from(sr25519::Public::from_raw([1u8; 32]));
 		let offender = T::DKGId::from(ecdsa::Public::from_raw([1u8; 33]));
 		let key_gen_sentence = T::KeygenJailSentence::get();
-		let block_number = key_gen_sentence + BlockNumberFor<T>::from(BLOCK_NUMBER);
+		let block_number = key_gen_sentence + BlockNumberFor::<T>::from(BLOCK_NUMBER);
 		frame_system::Pallet::<T>::set_block_number(block_number.into());
 	}: _(RawOrigin::Signed(caller))
 	verify {

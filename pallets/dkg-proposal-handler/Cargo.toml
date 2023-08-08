@@ -47,6 +47,7 @@ runtime-benchmarks = [
 	"frame-system/runtime-benchmarks",
     "frame-support/runtime-benchmarks",
 	"pallet-dkg-metadata/runtime-benchmarks",
+	"pallet-dkg-proposals/runtime-benchmarks",
 ]
 std = [
 	"codec/std",
@@ -64,5 +65,6 @@ std = [
 	"pallet-dkg-metadata/std",
 	"webb-proposals/std",
 	"log/std",
-	"pallet-aura/std"
+	"pallet-aura/std",
+	"pallet-dkg-proposals/std"
 ]
