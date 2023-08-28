@@ -440,7 +440,6 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		#[pallet::weight(<T as Config>::WeightInfo::submit_signed_proposals(props.len() as u32))]
 		#[pallet::call_index(0)]
-		#[frame_support::transactional]
 		pub fn submit_signed_proposals(
 			_origin: OriginFor<T>,
 			props: Vec<SignedProposalBatchOf<T>>,

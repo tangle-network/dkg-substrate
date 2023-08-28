@@ -215,7 +215,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::weight(<T as Config>::WeightInfo::force_reset_indices())]
+		#[pallet::weight(<T as Config>::WeightInfo::force_reset_indices(resource_ids.len() as u32))]
 		#[pallet::call_index(1)]
 		pub fn force_reset_indices(
 			origin: OriginFor<T>,
@@ -223,6 +223,11 @@ pub mod pallet {
 			bridge_index: T::BridgeIndex,
 		) -> DispatchResultWithPostInfo {
 			T::ForceOrigin::ensure_origin(origin)?;
+			let max_resources = T::MaxResources::get() as usize;
+			// Ensure that the resource_ids vector is within bounds
+			if resource_ids.len() > max_resources {
+				return Err(Error::<T>::TooManyResources.into())
+			}
 			for resource_id in resource_ids {
 				ResourceToBridgeIndex::<T>::insert(resource_id, bridge_index);
 			}

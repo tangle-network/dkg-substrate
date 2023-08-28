@@ -13359,7 +13359,7 @@ dependencies = [
 [[package]]
 name = "webb-proposals"
 version = "0.6.0"
-source = "git+https://github.com/webb-tools/webb-rs#a960eaf9611d72786bd4dd96b35f70d151c3d2b8"
+source = "git+https://github.com/webb-tools/webb-rs?rev=a960eaf#a960eaf9611d72786bd4dd96b35f70d151c3d2b8"
 dependencies = [
  "frame-support",
  "hex",
