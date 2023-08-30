@@ -130,11 +130,12 @@ impl<F> Future for ExplicitPanicFuture<F> {
 	}
 }
 
-pub fn bad_actors_to_authorities<T: Into<usize>>(
+pub fn bad_actors_to_authorities<T: Into<usize> + Debug>(
 	bad_actors: Vec<T>,
 	mapping: &Arc<HashMap<usize, AuthorityId>>,
 ) -> Vec<AuthorityId> {
 	let mut ret = Vec::new();
+
 	for bad_actor in bad_actors {
 		if let Some(authority) = mapping.get(&bad_actor.into()) {
 			ret.push(authority.clone());

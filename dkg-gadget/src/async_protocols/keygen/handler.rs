@@ -60,9 +60,11 @@ where
 		let bad_actors_rx = params.handle.current_round_blame.clone();
 
 		let protocol = async move {
-			params.logger.info_keygen(
-				"Will execute keygen since local is in best authority set".to_string(),
-			);
+			params.logger.info_keygen(format!(
+				"Will execute keygen since local is in best authority set len={} | {:?}",
+				params.best_authorities.len(),
+				params.best_authorities
+			));
 			let t = threshold;
 			let n = params.best_authorities.len() as u16;
 			// wait for the start signal

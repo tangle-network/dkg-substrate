@@ -10,7 +10,7 @@ use crate::{
 	Client,
 };
 use async_trait::async_trait;
-use dkg_primitives::types::DKGError;
+use dkg_primitives::types::{DKGError, SSID};
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi, MaxAuthorities, MaxProposalLength};
 use sc_client_api::Backend;
 use sp_runtime::traits::{Block, NumberFor};
@@ -51,7 +51,7 @@ where
 			keygen_protocol_hash,
 		} = params
 		{
-			const KEYGEN_SSID: u8 = 0;
+			const KEYGEN_SSID: SSID = 0;
 			match self.dkg_worker.generate_async_proto_params(
 				best_authorities,
 				authority_public_key,

@@ -25,6 +25,7 @@ use sc_network_sync::SyncingService;
 use sp_consensus::SyncOracle;
 
 use crate::signing_manager::SigningManager;
+use dkg_primitives::types::SSID;
 use futures::StreamExt;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 use parking_lot::{Mutex, RwLock};
@@ -306,7 +307,7 @@ where
 		stage: ProtoStageType,
 		protocol_name: &str,
 		associated_block: NumberFor<B>,
-		ssid: u8,
+		ssid: SSID,
 	) -> Result<
 		AsyncProtocolParameters<
 			DKGProtocolEngine<
@@ -454,6 +455,24 @@ where
 		}
 
 		None
+	}
+
+	/// Get the keygen threshold at a specific block
+	pub async fn get_keygen_threshold(&self, header: &B::Header) -> u16 {
+		let at = header.hash();
+		self.exec_client_function(move |client| {
+			client.runtime_api().keygen_threshold(at).unwrap_or_default()
+		})
+		.await
+	}
+
+	/// Get the next keygen threshold at a specific block
+	pub async fn get_next_keygen_threshold(&self, header: &B::Header) -> u16 {
+		let at = header.hash();
+		self.exec_client_function(move |client| {
+			client.runtime_api().next_keygen_threshold(at).unwrap_or_default()
+		})
+		.await
 	}
 
 	/// Get the signature threshold at a specific block
@@ -957,25 +976,29 @@ where
 		Ok(Public::from(signer))
 	}
 
-	fn get_jailed_signers_inner(
+	async fn get_jailed_signers_inner(
 		&self,
 		best_authorities: &[Public],
 	) -> Result<Vec<Public>, DKGError> {
 		let now = self.latest_header.read().clone().ok_or_else(|| DKGError::CriticalError {
 			reason: "latest header does not exist!".to_string(),
 		})?;
+		let best_authorities = best_authorities.to_vec();
 		let at = now.hash();
-		Ok(self
-			.client
-			.runtime_api()
-			.get_signing_jailed(at, best_authorities.to_vec())
-			.unwrap_or_default())
+		exec_client_function(&self.client, move |client| {
+			Ok(client
+				.runtime_api()
+				.get_signing_jailed(at, best_authorities)
+				.unwrap_or_default())
+		})
+		.await
 	}
-	pub(crate) fn get_unjailed_signers(
+
+	pub(crate) async fn get_unjailed_signers(
 		&self,
 		best_authorities: &[Public],
 	) -> Result<Vec<u16>, DKGError> {
-		let jailed_signers = self.get_jailed_signers_inner(best_authorities)?;
+		let jailed_signers = self.get_jailed_signers_inner(best_authorities).await?;
 		Ok(best_authorities
 			.iter()
 			.enumerate()
@@ -985,11 +1008,11 @@ where
 	}
 
 	/// Get the jailed signers
-	pub(crate) fn get_jailed_signers(
+	pub(crate) async fn get_jailed_signers(
 		&self,
 		best_authorities: &[Public],
 	) -> Result<Vec<u16>, DKGError> {
-		let jailed_signers = self.get_jailed_signers_inner(best_authorities)?;
+		let jailed_signers = self.get_jailed_signers_inner(best_authorities).await?;
 		Ok(best_authorities
 			.iter()
 			.enumerate()

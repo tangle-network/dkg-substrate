@@ -34,6 +34,8 @@ pub enum DKGMsgStatus {
 	QUEUED,
 }
 
+pub type SSID = u16;
+
 /// Gossip message struct for all DKG + Webb Protocol messages.
 ///
 /// A message wrapper intended to be passed between the nodes
@@ -53,7 +55,7 @@ pub struct DKGMessage<AuthorityId> {
 	/// The round ID
 	pub associated_block_id: u64,
 	/// The signing set ID
-	pub ssid: u8,
+	pub ssid: SSID,
 }
 
 #[derive(Debug, Clone, Decode, Encode)]

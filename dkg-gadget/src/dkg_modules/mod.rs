@@ -6,7 +6,7 @@ use crate::{
 	Client,
 };
 use async_trait::async_trait;
-use dkg_primitives::types::DKGError;
+use dkg_primitives::types::{DKGError, SSID};
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	BatchId, DKGApi, MaxAuthorities, MaxProposalLength, MaxProposalsInBatch, SessionId,
@@ -54,7 +54,7 @@ pub enum SigningProtocolSetupParameters<B: Block> {
 		>,
 		signing_set: Vec<KeygenPartyId>,
 		associated_block_id: NumberFor<B>,
-		ssid: u8,
+		ssid: SSID,
 		unsigned_proposal_hash: [u8; 32],
 	},
 	WTFrost {},

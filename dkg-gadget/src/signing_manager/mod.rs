@@ -21,7 +21,7 @@ use crate::{
 	*,
 };
 use codec::Encode;
-use dkg_primitives::utils::select_random_set;
+use dkg_primitives::{types::SSID, utils::select_random_set};
 use dkg_runtime_primitives::{
 	crypto::Public, BatchId, MaxProposalsInBatch, SessionId, StoredUnsignedProposalBatch,
 	SIGN_TIMEOUT,
@@ -32,6 +32,7 @@ use sp_arithmetic::traits::SaturatedConversion;
 use sp_runtime::traits::Header;
 use std::sync::atomic::{AtomicBool, Ordering};
 use webb_proposals::TypedChainId;
+
 /// For balancing the amount of work done by each node
 pub mod work_manager;
 
@@ -59,7 +60,7 @@ pub struct SigningManager<B: Block, BE, C, GE> {
 
 #[derive(Default)]
 struct SigningSetHistoryTracker {
-	ssids_attempted: HashSet<u8>,
+	ssids_attempted: HashSet<SSID>,
 	attempted_sets: HashSet<ProposedSigningSet>,
 }
 
@@ -179,6 +180,7 @@ where
 			.into_iter()
 			.flat_map(|(i, p)| KeygenPartyId::try_from(i).map(|i| (i, p)))
 			.collect();
+
 		let threshold = dkg_worker.get_signature_threshold(header).await;
 		let authority_public_key = dkg_worker.get_authority_public_key();
 
@@ -261,16 +263,19 @@ where
 					.ssids_attempted
 					.insert(next_ssid);
 
-				if let Some(signing_set) = self.maybe_create_signing_set(
-					dkg_worker,
-					&dkg_pub_key,
-					&unsigned_proposal_bytes,
-					next_ssid,
-					threshold,
-					session_id,
-					&best_authorities,
-					header,
-				) {
+				if let Some(signing_set) = self
+					.maybe_create_signing_set(
+						dkg_worker,
+						&dkg_pub_key,
+						&unsigned_proposal_bytes,
+						next_ssid,
+						threshold,
+						session_id,
+						&best_authorities,
+						header,
+					)
+					.await
+				{
 					let ssid = next_ssid;
 					let local_in_this_set = signing_set.signing_set.contains(&party_i);
 
@@ -305,7 +310,6 @@ where
 						break
 					}
 
-					// TODO: why do some nodes think SSID 14 is novel, while others don't?
 					// If this set is not novel, we must continue looping until we find a novel set
 					if !is_novel {
 						dkg_worker.logger.debug(format!("Attempted SSID {ssid}={signing_set:?}, however, this set is not novel. Continuing to loop"));
@@ -325,7 +329,7 @@ where
 						session_id,
 						ssid,
 						threshold,
-						best_authorities.len(),
+						signing_set.signing_set.len(),
 						signing_set,
 					));
 
@@ -438,12 +442,12 @@ where
 	/// Create a seed s where s is keccak256(pk, fN=at, unsignedProposal)
 	/// This seed is used in the random number generator to generate a
 	/// deterministic signing set of size t+1
-	fn maybe_create_signing_set(
+	async fn maybe_create_signing_set(
 		&self,
 		dkg_worker: &DKGWorker<B, BE, C, GE>,
 		dkg_pub_key: &[u8],
 		unsigned_proposal_bytes: &[u8],
-		ssid: u8,
+		ssid: SSID,
 		threshold: u16,
 		_session_id: SessionId,
 		best_authorities: &[(KeygenPartyId, Public)],
@@ -458,7 +462,8 @@ where
 		let seed = sp_core::keccak_256(&concat_data);
 		let locally_proposed_at: u64 = (*header.number()).saturated_into();
 
-		let maybe_set = self.generate_signers(&seed, threshold, best_authorities, dkg_worker).ok();
+		let maybe_set =
+			self.generate_signers(&seed, threshold, best_authorities, dkg_worker).await.ok();
 
 		maybe_set.map(|signing_set| ProposedSigningSet {
 			locally_proposed_at,
@@ -470,7 +475,7 @@ where
 	/// After keygen, this should be called to generate a random set of signers
 	/// NOTE: since the random set is called using a deterministic seed to and RNG,
 	/// the resulting set is deterministic
-	fn generate_signers(
+	async fn generate_signers(
 		&self,
 		seed: &[u8],
 		t: u16,
@@ -478,10 +483,10 @@ where
 		dkg_worker: &DKGWorker<B, BE, C, GE>,
 	) -> Result<Vec<KeygenPartyId>, DKGError> {
 		let only_public_keys = best_authorities.iter().map(|(_, p)| p).cloned().collect::<Vec<_>>();
-		let mut final_set = dkg_worker.get_unjailed_signers(&only_public_keys)?;
+		let mut final_set = dkg_worker.get_unjailed_signers(&only_public_keys).await?;
 		// Mutate the final set if we don't have enough unjailed signers
 		if final_set.len() <= t as usize {
-			let jailed_set = dkg_worker.get_jailed_signers(&only_public_keys)?;
+			let jailed_set = dkg_worker.get_jailed_signers(&only_public_keys).await?;
 			let diff = t as usize + 1 - final_set.len();
 			final_set = final_set
 				.iter()
@@ -500,7 +505,7 @@ where
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProposedSigningSet {
-	pub ssid: u8,
+	pub ssid: SSID,
 	pub locally_proposed_at: u64,
 	pub signing_set: HashSet<KeygenPartyId>,
 }
@@ -519,5 +524,5 @@ impl Hash for ProposedSigningSet {
 
 pub enum SigningResult {
 	Success { unsigned_proposal_hash: [u8; 32] },
-	Failure { unsigned_proposal_hash: [u8; 32], ssid: u8 },
+	Failure { unsigned_proposal_hash: [u8; 32], ssid: SSID },
 }

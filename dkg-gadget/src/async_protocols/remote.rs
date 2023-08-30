@@ -16,7 +16,7 @@ use crate::{
 	async_protocols::CurrentRoundBlame, debug_logger::DebugLogger, worker::ProtoStageType,
 };
 use atomic::Atomic;
-use dkg_primitives::types::{DKGError, NetworkMsgPayload, SessionId, SignedDKGMessage};
+use dkg_primitives::types::{DKGError, NetworkMsgPayload, SessionId, SignedDKGMessage, SSID};
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	KEYGEN_TIMEOUT, SIGN_TIMEOUT,
@@ -46,7 +46,7 @@ pub struct AsyncProtocolRemote<C> {
 	pub(crate) session_id: SessionId,
 	pub(crate) associated_block_id: u64,
 	/// The signing set index. For keygen, this is always 0
-	pub(crate) ssid: u8,
+	pub(crate) ssid: SSID,
 	pub(crate) logger: DebugLogger,
 	status_history: Arc<Mutex<Vec<MetaHandlerStatus>>>,
 	/// Contains the mapping of index to authority id for this specific protocol. Varies between
@@ -118,7 +118,7 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 		session_id: SessionId,
 		logger: DebugLogger,
 		associated_block_id: u64,
-		ssid: u8,
+		ssid: SSID,
 		proto_stage_type: ProtoStageType,
 		index_to_authority_mapping: Arc<HashMap<usize, AuthorityId>>,
 	) -> Self {

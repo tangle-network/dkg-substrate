@@ -393,7 +393,7 @@ impl<
 					KeygenRound::Next => "NEXT",
 				};
 				let keygen_protocol_hash = hex::encode(keygen_protocol_hash);
-				write!(f, "{ty} | Keygen: (i, t, n, r)  | hash: {keygen_protocol_hash} = ({i}, {t}, {n}, {associated_round_id:?})")
+				write!(f, "{ty} | Keygen: (i, t, n, r) = ({i}, {t}, {n}, {associated_round_id:?}) | hash: {keygen_protocol_hash}")
 			},
 			ProtocolType::Offline { i, unsigned_proposal_batch, .. } => {
 				write!(
@@ -452,6 +452,11 @@ where
 	<SM as StateMachine>::MessageBody: Send + Serialize + MessageRoundID,
 	<SM as StateMachine>::Output: Send,
 {
+	params.logger.debug(format!(
+		"Will be starting an async protocol for authority {:?}",
+		params.authority_public_key
+	));
+
 	let (incoming_tx_proto, incoming_rx_proto) = SM::generate_channel();
 	let (outgoing_tx, outgoing_rx) = futures::channel::mpsc::unbounded();
 
