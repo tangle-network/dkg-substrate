@@ -1170,7 +1170,9 @@ pub mod pallet {
 											NextSignatureThreshold::<T>::put(
 												next_signature_threshold - 1,
 											);
-											PendingSignatureThreshold::<T>::put(next_signature_threshold - 1);
+											PendingSignatureThreshold::<T>::put(
+												next_signature_threshold - 1,
+											);
 										}
 									}
 								}
