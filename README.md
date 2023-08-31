@@ -122,7 +122,7 @@ If you would like to run the dkg with verbose logs you may add the following arg
 
 <h2 id="contribute"> Contributing </h2>
 
-Interested in contributing to the Webb Relayer Network? Thank you so much for your interest! We are always appreciative for contributions from the open-source community!
+Interested in contributing to the Webb DKG Protocol? Thank you so much for your interest! We are always appreciative for contributions from the open-source community!
 
 If you have a contribution in mind, please check out our [Contribution Guide](./.github/CONTRIBUTING.md) for information on how to do so. We are excited for your first contribution!
 
