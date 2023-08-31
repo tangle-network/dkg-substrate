@@ -173,7 +173,7 @@ impl CurrentRoundBlame {
 	Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, codec::Encode, codec::Decode,
 )]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
-pub struct KeygenPartyId(u16);
+pub struct KeygenPartyId(pub u16);
 
 /// A Offline Party Id, in the range [1, t+1], where t is the signing threshold.
 ///

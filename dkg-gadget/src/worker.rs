@@ -976,51 +976,6 @@ where
 		Ok(Public::from(signer))
 	}
 
-	async fn get_jailed_signers_inner(
-		&self,
-		best_authorities: &[Public],
-	) -> Result<Vec<Public>, DKGError> {
-		let now = self.latest_header.read().clone().ok_or_else(|| DKGError::CriticalError {
-			reason: "latest header does not exist!".to_string(),
-		})?;
-		let best_authorities = best_authorities.to_vec();
-		let at = now.hash();
-		exec_client_function(&self.client, move |client| {
-			Ok(client
-				.runtime_api()
-				.get_signing_jailed(at, best_authorities)
-				.unwrap_or_default())
-		})
-		.await
-	}
-
-	pub(crate) async fn get_unjailed_signers(
-		&self,
-		best_authorities: &[Public],
-	) -> Result<Vec<u16>, DKGError> {
-		let jailed_signers = self.get_jailed_signers_inner(best_authorities).await?;
-		Ok(best_authorities
-			.iter()
-			.enumerate()
-			.filter(|(_, key)| !jailed_signers.contains(key))
-			.map(|(i, _)| u16::try_from(i + 1).unwrap_or_default())
-			.collect())
-	}
-
-	/// Get the jailed signers
-	pub(crate) async fn get_jailed_signers(
-		&self,
-		best_authorities: &[Public],
-	) -> Result<Vec<u16>, DKGError> {
-		let jailed_signers = self.get_jailed_signers_inner(best_authorities).await?;
-		Ok(best_authorities
-			.iter()
-			.enumerate()
-			.filter(|(_, key)| jailed_signers.contains(key))
-			.map(|(i, _)| u16::try_from(i + 1).unwrap_or_default())
-			.collect())
-	}
-
 	pub async fn should_execute_new_keygen(
 		&self,
 		header: &B::Header,

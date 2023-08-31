@@ -1,6 +1,5 @@
 use std::{
 	collections::{HashMap, HashSet},
-	hash::{Hash, Hasher},
 	marker::PhantomData,
 };
 
@@ -21,12 +20,15 @@ use crate::{
 	*,
 };
 use codec::Encode;
-use dkg_primitives::{types::SSID, utils::select_random_set};
+use dkg_primitives::types::SSID;
 use dkg_runtime_primitives::{
-	crypto::Public, BatchId, MaxProposalsInBatch, SessionId, StoredUnsignedProposalBatch,
-	SIGN_TIMEOUT,
+	crypto::Public, BatchId, MaxProposalsInBatch, StoredUnsignedProposalBatch, SIGN_TIMEOUT,
 };
 use itertools::Itertools;
+use rand::{
+	prelude::{IteratorRandom, StdRng},
+	SeedableRng,
+};
 use sp_api::HeaderT;
 use sp_arithmetic::traits::SaturatedConversion;
 use sp_runtime::traits::Header;
@@ -61,7 +63,7 @@ pub struct SigningManager<B: Block, BE, C, GE> {
 #[derive(Default)]
 struct SigningSetHistoryTracker {
 	ssids_attempted: HashSet<SSID>,
-	attempted_sets: HashSet<ProposedSigningSet>,
+	sets: Vec<ProposedSigningSet>,
 }
 
 type UnsignedProposalsVec<B> =
@@ -211,9 +213,9 @@ where
 			let latest_attempt = ssid_lock
 				.entry(unsigned_proposal_hash)
 				.or_default()
-				.attempted_sets
+				.sets
 				.iter()
-				.map(|r| r.locally_proposed_at)
+				.filter_map(|r| r.locally_started_at)
 				.max();
 
 			// Next, check to see if we are already locally waiting for this set to complete
@@ -235,148 +237,123 @@ where
 			//   start the next one
 			// In either case, we need to find the next UNIQUE signing set to attempt
 
-			// Loop until we generate a signing set that is unique compared to previous signing sets
-			for _ in 0..MAX_POTENTIAL_RETRIES_PER_UNSIGNED_PROPOSAL {
-				if ssid_lock.entry(unsigned_proposal_hash).or_default().ssids_attempted.len() >=
-					MAX_POTENTIAL_RETRIES_PER_UNSIGNED_PROPOSAL as usize
-				{
-					dkg_worker.logger.info(format!("🕸️  PARTY {party_i} | SESSION {session_id} | MAX_POTENTIAL_RETRIES_PER_UNSIGNED_PROPOSAL reached. Will not attempt to sign this proposal"));
-					break
-				}
+			let mut next_ssid = ssid_lock
+				.entry(unsigned_proposal_hash)
+				.or_default()
+				.ssids_attempted
+				.iter()
+				.max()
+				.copied()
+				.map(|r| r.wrapping_add(1)) // Take the max value and add one to it to get the next SSID
+				.unwrap_or(0); // If there are no elements, start off at SSID 0
 
-				// First, generate the next SSID
-				let next_ssid = ssid_lock
-					.entry(unsigned_proposal_hash)
-					.or_default()
-					.ssids_attempted
-					.iter()
-					.max()
-					.copied()
-					.map(|r| r.wrapping_add(1)) // Take the max value and add one to it to get the next SSID
-					.unwrap_or(0); // If there are no elements, start off at SSID 0
+			if next_ssid == 0 {
+				// We need to generate the sets
+				let signing_sets = self.generate_signing_sets(
+					dkg_worker,
+					dkg_pub_key.clone(),
+					unsigned_proposal_bytes.clone(),
+					&best_authorities,
+					threshold,
+				);
+				ssid_lock.entry(unsigned_proposal_hash).or_default().sets = signing_sets;
+			}
 
-				// Immediately add the next SSID to the ssids_attempted, that way,
-				// if we don't later generate a novel set, we start at the next index
-				ssid_lock
-					.entry(unsigned_proposal_hash)
-					.or_default()
-					.ssids_attempted
-					.insert(next_ssid);
+			if next_ssid as usize >= ssid_lock.entry(unsigned_proposal_hash).or_default().sets.len()
+			{
+				// If we reached the maximum number of attempted sets, we need to reset back to zero
+				// and try again
+				dkg_worker.logger.warn(format!(
+					"Reached the maximum number of attempted sets for proposal hash {:?}; Will restart from SSID 0",
+					unsigned_proposal_hash
+				));
+				ssid_lock.entry(unsigned_proposal_hash).or_default().ssids_attempted.clear();
+				next_ssid = 0;
+			}
 
-				if let Some(signing_set) = self
-					.maybe_create_signing_set(
-						dkg_worker,
-						&dkg_pub_key,
-						&unsigned_proposal_bytes,
-						next_ssid,
-						threshold,
-						session_id,
-						&best_authorities,
-						header,
-					)
-					.await
-				{
-					let ssid = next_ssid;
-					let local_in_this_set = signing_set.signing_set.contains(&party_i);
+			// Immediately add the next SSID to the ssids_attempted, that way,
+			// if we don't later generate a novel set, we start at the next index
+			ssid_lock
+				.entry(unsigned_proposal_hash)
+				.or_default()
+				.ssids_attempted
+				.insert(next_ssid);
 
-					// Now, check to see if this signing set is novel. If it is, we can break out of
-					// the loop
-					let is_novel = !ssid_lock
-						.entry(unsigned_proposal_hash)
-						.or_default()
-						.attempted_sets
-						.iter()
-						.any(|set| set.signing_set == signing_set.signing_set);
+			if let Some(signing_set) = ssid_lock
+				.entry(unsigned_proposal_hash)
+				.or_default()
+				.sets
+				.get_mut(next_ssid as usize)
+			{
+				let ssid = next_ssid;
+				let local_in_this_set = signing_set.signing_set.contains(&party_i);
 
-					// If this set it novel, and, we are NOT in this set, let the other nodes
-					// attempt this protocol. Break out of the loop
-					if is_novel && !local_in_this_set {
-						// TODO: before trying the NEXT unique signing set the next time a finality
-						// notification happens, check to see if the full_unsigned_proposals
-						// contains this proposal. If it does, AND, we know it is stalled,
-						// we can try running again. If it does contain the proposal, but it's NOT
-						// stalled, we return immediately and don't run protocols for this unsigned
-						// hash until we know it is stalled OR if the protocol was a success. We can
-						// tell a protocol is a success if this unsigned proposal hash is not inside
-						// the full_unsigned_proposals anymore
-						dkg_worker.logger.debug(format!("Attempted SSID {ssid}={signing_set:?}, however, this set is novel and local is not in this set. Delegating to other nodes"));
-						// To ensure we count this the next time the delegated nodes fail, add this
-						// to the list
-						ssid_lock
-							.entry(unsigned_proposal_hash)
-							.or_default()
-							.attempted_sets
-							.insert(signing_set.clone());
-						break
-					}
+				// Set this value to signify that we have started a protocol for this SSID
+				signing_set.locally_started_at = Some((*header.number()).saturated_into());
 
-					// If this set is not novel, we must continue looping until we find a novel set
-					if !is_novel {
-						dkg_worker.logger.debug(format!("Attempted SSID {ssid}={signing_set:?}, however, this set is not novel. Continuing to loop"));
-						continue
-					}
-
-					// If we reach here, then, this signing set is NOVEL and we are in this set.
-					// Add this to the attempted sets
+				if !local_in_this_set {
+					dkg_worker.logger.debug(format!("Attempted SSID {ssid}={signing_set:?}, however, this set is novel and local is not in this set. Delegating to other nodes"));
+					// To ensure we count this the next time the delegated nodes fail, add this
+					// to the list
 					ssid_lock
 						.entry(unsigned_proposal_hash)
 						.or_default()
-						.attempted_sets
-						.insert(signing_set.clone());
+						.ssids_attempted
+						.insert(ssid);
+					continue
+				}
 
-					dkg_worker.logger.info(format!(
-						"🕸️  Session Id {:?} | SSID {} | {}-out-of-{} signers: ({:?})",
-						session_id,
-						ssid,
-						threshold,
-						signing_set.signing_set.len(),
-						signing_set,
-					));
+				// We are in this set, and, this set is novel. Run a protocol
+				dkg_worker.logger.info(format!(
+					"🕸️  Session Id {:?} | SSID {} | {}-out-of-{} signers: ({:?})",
+					session_id,
+					ssid,
+					threshold,
+					signing_set.signing_set.len(),
+					signing_set,
+				));
 
-					let params = SigningProtocolSetupParameters::MpEcdsa {
-						best_authorities: best_authorities.clone(),
-						authority_public_key: authority_public_key.clone(),
-						party_i,
-						session_id,
-						threshold,
-						stage: ProtoStageType::Signing { unsigned_proposal_hash },
-						unsigned_proposal_batch: batch.clone(),
-						signing_set: signing_set.into_sorted_vec(),
-						associated_block_id: *header.number(),
-						ssid,
-						unsigned_proposal_hash,
-					};
+				let params = SigningProtocolSetupParameters::MpEcdsa {
+					best_authorities: best_authorities.clone(),
+					authority_public_key: authority_public_key.clone(),
+					party_i,
+					session_id,
+					threshold,
+					stage: ProtoStageType::Signing { unsigned_proposal_hash },
+					unsigned_proposal_batch: batch.clone(),
+					signing_set: signing_set.signing_set.clone(),
+					associated_block_id: *header.number(),
+					ssid,
+					unsigned_proposal_hash,
+				};
 
-					let signing_protocol = dkg_worker
-						.dkg_modules
-						.get_signing_protocol(&params)
-						.expect("Standard signing protocol should exist");
-					match signing_protocol.initialize_signing_protocol(params).await {
-						Ok((handle, task)) => {
-							// Send task to the work manager. Force start if the type chain ID
-							// is None, implying this is a proposal needed for rotating sessions
-							// and thus a priority
-							let force_start = typed_chain_id == TypedChainId::None;
-							self.work_manager.push_task(
-								unsigned_proposal_hash,
-								force_start,
-								handle,
-								task,
-							)?;
-							// Break from the inner loop to continue to the next unsigned proposal
-							break
-						},
-						Err(err) => {
-							dkg_worker
-								.logger
-								.error(format!("Error creating signing protocol: {:?}", &err));
-							dkg_worker.handle_dkg_error(err.clone()).await;
-							return Err(err)
-						},
-					}
-				} else {
-					// If we get None, break out of the loop unconditionally
-					break
+				let signing_protocol = dkg_worker
+					.dkg_modules
+					.get_signing_protocol(&params)
+					.expect("Standard signing protocol should exist");
+
+				match signing_protocol.initialize_signing_protocol(params).await {
+					Ok((handle, task)) => {
+						// Send task to the work manager. Force start if the type chain ID
+						// is None, implying this is a proposal needed for rotating sessions
+						// and thus a priority
+						let force_start = typed_chain_id == TypedChainId::None;
+						self.work_manager.push_task(
+							unsigned_proposal_hash,
+							force_start,
+							handle,
+							task,
+						)?;
+						// Continue to the next unsigned proposal
+						continue
+					},
+					Err(err) => {
+						dkg_worker
+							.logger
+							.error(format!("Error creating signing protocol: {:?}", &err));
+						dkg_worker.handle_dkg_error(err.clone()).await;
+						return Err(err)
+					},
 				}
 			}
 		}
@@ -438,88 +415,51 @@ where
 		}
 	}
 
-	#[allow(clippy::too_many_arguments)]
-	/// Create a seed s where s is keccak256(pk, fN=at, unsignedProposal)
-	/// This seed is used in the random number generator to generate a
-	/// deterministic signing set of size t+1
-	async fn maybe_create_signing_set(
+	fn generate_signing_sets(
 		&self,
 		dkg_worker: &DKGWorker<B, BE, C, GE>,
-		dkg_pub_key: &[u8],
-		unsigned_proposal_bytes: &[u8],
-		ssid: SSID,
+		dkg_pub_key: Vec<u8>,
+		unsigned_proposal_bytes: Vec<u8>,
+		best_authorities: &[(KeygenPartyId, AuthorityId)],
 		threshold: u16,
-		_session_id: SessionId,
-		best_authorities: &[(KeygenPartyId, Public)],
-		header: &B::Header,
-	) -> Option<ProposedSigningSet> {
-		let concat_data = dkg_pub_key
-			.iter()
-			.copied()
-			.chain(unsigned_proposal_bytes.to_owned())
-			.chain(ssid.encode())
-			.collect::<Vec<u8>>();
+	) -> Vec<ProposedSigningSet> {
+		let concat_data =
+			dkg_pub_key.into_iter().chain(unsigned_proposal_bytes).collect::<Vec<u8>>();
 		let seed = sp_core::keccak_256(&concat_data);
-		let locally_proposed_at: u64 = (*header.number()).saturated_into();
+		let mut std_rng = <StdRng as SeedableRng>::from_seed(seed);
 
-		let maybe_set =
-			self.generate_signers(&seed, threshold, best_authorities, dkg_worker).await.ok();
+		let signing_sets = best_authorities
+			.iter()
+			.enumerate()
+			.map(|r| r.0 as u16 + 1) // Add 1 to convert to 1-indexed
+			.combinations(threshold as usize + 1) // We want t+1 per signing set
+			.take(256) // Take at most 256 signing sets
+			.map(|r| r.into_iter().map(KeygenPartyId).collect::<Vec<_>>())
+			.choose_multiple(&mut std_rng, 256); // Take at most 256 signing sets
 
-		maybe_set.map(|signing_set| ProposedSigningSet {
-			locally_proposed_at,
-			ssid,
-			signing_set: HashSet::from_iter(signing_set),
-		})
-	}
+		dkg_worker.logger.info(format!(
+			"Generated the following signing sets ({}): {signing_sets:?}",
+			signing_sets.len()
+		));
 
-	/// After keygen, this should be called to generate a random set of signers
-	/// NOTE: since the random set is called using a deterministic seed to and RNG,
-	/// the resulting set is deterministic
-	async fn generate_signers(
-		&self,
-		seed: &[u8],
-		t: u16,
-		best_authorities: &[(KeygenPartyId, Public)],
-		dkg_worker: &DKGWorker<B, BE, C, GE>,
-	) -> Result<Vec<KeygenPartyId>, DKGError> {
-		let only_public_keys = best_authorities.iter().map(|(_, p)| p).cloned().collect::<Vec<_>>();
-		let mut final_set = dkg_worker.get_unjailed_signers(&only_public_keys).await?;
-		// Mutate the final set if we don't have enough unjailed signers
-		if final_set.len() <= t as usize {
-			let jailed_set = dkg_worker.get_jailed_signers(&only_public_keys).await?;
-			let diff = t as usize + 1 - final_set.len();
-			final_set = final_set
-				.iter()
-				.chain(jailed_set.iter().take(diff))
-				.cloned()
-				.collect::<Vec<_>>();
-		}
-
-		select_random_set(seed, final_set, t + 1)
-			.map(|set| set.into_iter().flat_map(KeygenPartyId::try_from).collect::<Vec<_>>())
-			.map_err(|err| DKGError::CreateOfflineStage {
-				reason: format!("generate_signers failed, reason: {err}"),
+		signing_sets
+			.into_iter()
+			.enumerate()
+			.map(|(ssid, signing_set)| ProposedSigningSet {
+				ssid: ssid as u16,
+				locally_started_at: None,
+				signing_set,
 			})
+			.collect()
 	}
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProposedSigningSet {
 	pub ssid: SSID,
-	pub locally_proposed_at: u64,
-	pub signing_set: HashSet<KeygenPartyId>,
-}
-
-impl ProposedSigningSet {
-	fn into_sorted_vec(self) -> Vec<KeygenPartyId> {
-		self.signing_set.into_iter().sorted().collect()
-	}
-}
-
-impl Hash for ProposedSigningSet {
-	fn hash<H: Hasher>(&self, state: &mut H) {
-		self.clone().into_sorted_vec().hash(state)
-	}
+	// Value is Some if this was started, None if only generated
+	pub locally_started_at: Option<u64>,
+	pub signing_set: Vec<KeygenPartyId>,
 }
 
 pub enum SigningResult {
