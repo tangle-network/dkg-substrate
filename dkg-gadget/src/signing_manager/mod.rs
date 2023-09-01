@@ -435,7 +435,7 @@ where
 			.combinations(threshold as usize + 1) // We want t+1 per signing set
 			.take(256) // Take at most 256 signing sets
 			.map(|r| r.into_iter().map(KeygenPartyId).collect::<Vec<_>>())
-			.choose_multiple(&mut std_rng, 256); // Take at most 256 signing sets
+			.choose_multiple(&mut std_rng, 256); // Take and deterministically shuffle at most 256 signing sets
 
 		dkg_worker.logger.info(format!(
 			"Generated the following signing sets ({}): {signing_sets:?}",

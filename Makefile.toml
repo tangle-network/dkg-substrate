@@ -13,7 +13,7 @@ args = ["clean"]
 
 [tasks.build-test]
 command = "cargo"
-args = ["build", "-rp", "dkg-standalone-node", "--features=integration-tests"]
+args = ["build", "-rp", "dkg-standalone-node", "--features=integration-tests,testing"]
 
 [tasks.alice]
 dependencies = ["build-test"]

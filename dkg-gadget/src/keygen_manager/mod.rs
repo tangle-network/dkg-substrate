@@ -278,6 +278,19 @@ where
 				)
 				.await
 		}
+
+		if matches!(state, KeygenState::Failed { session_id: 1 }) {
+			// If we are at genesis, and we have failed keygen for session 1, we may need to begin a
+			// keygen for session 1
+			return self
+				.maybe_start_keygen_for_stage(
+					KeygenRound::Next,
+					header,
+					dkg_worker,
+					anticipated_execution,
+				)
+				.await
+		}
 	}
 
 	/// Check to see if we need to run a keygen for session 2, 3, 4, .., etc.
