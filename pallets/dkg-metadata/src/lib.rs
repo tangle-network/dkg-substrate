@@ -716,6 +716,8 @@ pub mod pallet {
 			pub_key: Vec<u8>,
 			/// The Signature of the data above, concatenated.
 			signature: Vec<u8>,
+			/// The compressed pub key
+			compressed_pub_key: Vec<u8>,
 		},
 		/// Current Public Key Changed.
 		PublicKeyChanged { compressed_pub_key: Vec<u8> },
@@ -733,6 +735,8 @@ pub mod pallet {
 			pub_key: Vec<u8>,
 			/// The Signature of the data above, concatenated.
 			signature: Vec<u8>,
+			/// The compressed pub key
+			compressed_pub_key: Vec<u8>,
 		},
 		/// Misbehaviour reports submitted
 		MisbehaviourReportsSubmitted {
@@ -1874,9 +1878,9 @@ impl<T: Config> Pallet<T> {
 			RefreshNonce::<T>::put(next_nonce);
 
 			// Emit events so other front-end know that.
-			let compressed_pub_key = next_pub_key.1;
+			let compressed_pub_key = next_pub_key.1.clone();
 			Self::deposit_event(Event::PublicKeyChanged {
-				compressed_pub_key: compressed_pub_key.into(),
+				compressed_pub_key: compressed_pub_key.clone().into(),
 			});
 
 			// At this point the refresh proposal should ALWAYS exist
@@ -1888,6 +1892,7 @@ impl<T: Config> Pallet<T> {
 					nonce: curr.nonce,
 					pub_key: curr.pub_key,
 					signature: next_pub_key_signature.into(),
+					compressed_pub_key: compressed_pub_key.to_vec(),
 				});
 
 				CurrentRefreshProposal::<T>::kill();
@@ -2440,6 +2445,9 @@ impl<T: Config> OnSignedProposal<T::MaxProposalLength> for Pallet<T> {
 		ensure!(proposal.is_signed(), Error::<T>::ProposalNotSigned);
 
 		if proposal.kind() == ProposalKind::Refresh {
+			let (_, next_pub_key) =
+				Self::next_dkg_public_key().ok_or(Error::<T>::NoNextPublicKey)?;
+
 			// Check if a signature is already submitted. This should also prevent
 			// against manipulating the ECDSA signature to replay the submission.
 			ensure!(
@@ -2479,6 +2487,7 @@ impl<T: Config> OnSignedProposal<T::MaxProposalLength> for Pallet<T> {
 				voter_count: curr.voter_count,
 				nonce: curr.nonce,
 				pub_key: curr.pub_key,
+				compressed_pub_key: next_pub_key.into(),
 			});
 		};
 
