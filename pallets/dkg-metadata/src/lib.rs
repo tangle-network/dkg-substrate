@@ -1162,7 +1162,7 @@ pub mod pallet {
 									let new_val = u16::try_from(unjailed_authorities.len() - 1)
 										.unwrap_or_default();
 									Self::update_next_keygen_threshold(new_val);
-									NextKeygenThreshold::<T>::put(new_val);
+									Self::update_pending_keygen_threshold(new_val);
 
 									if NextSignatureThreshold::<T>::get() >=
 										NextKeygenThreshold::<T>::get()
@@ -1172,6 +1172,9 @@ pub mod pallet {
 											NextSignatureThreshold::<T>::get();
 										if next_signature_threshold != 1 {
 											NextSignatureThreshold::<T>::put(
+												next_signature_threshold - 1,
+											);
+											PendingSignatureThreshold::<T>::put(
 												next_signature_threshold - 1,
 											);
 										}
@@ -2149,6 +2152,16 @@ impl<T: Config> Pallet<T> {
 			NextKeygenThreshold::<T>::put(next_threshold);
 			Self::deposit_event(Event::NextKeygenThresholdUpdated {
 				next_keygen_threshold: next_threshold,
+			});
+		}
+	}
+
+	pub fn update_pending_keygen_threshold(next_threshold: u16) {
+		let current_pending_keygen_threshold = Self::pending_keygen_threshold();
+		if current_pending_keygen_threshold != next_threshold {
+			PendingKeygenThreshold::<T>::put(next_threshold);
+			Self::deposit_event(Event::PendingKeygenThresholdUpdated {
+				pending_keygen_threshold: next_threshold,
 			});
 		}
 	}

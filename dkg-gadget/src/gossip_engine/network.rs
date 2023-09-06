@@ -426,7 +426,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 					self.logger
 						.error(format!("Send handshake message to peer {remote} failed: {err:?}"));
 				} else {
-					self.logger.debug("Send handshake message to peer {remote} succeeded");
+					self.logger.debug(format!("Send handshake message to peer {remote} succeeded"));
 				}
 				let mut lock = self.peers.write();
 				let _was_in = lock.insert(
@@ -463,11 +463,12 @@ impl<B: Block + 'static> GossipHandler<B> {
 							debug_assert_eq!(expected_remote, Some(remote));
 						},
 					None => {
-						self.logger
-							.debug("Peer {remote} disconnected without sending handshake message");
+						self.logger.debug(format!(
+							"Peer {remote} disconnected without sending handshake message"
+						));
 					},
 				}
-				self.logger.debug("Peer {remote} disconnected from gossip protocol");
+				self.logger.debug(format!("Peer {remote} disconnected from gossip protocol"));
 			},
 
 			Event::NotificationsReceived { remote, messages } => {

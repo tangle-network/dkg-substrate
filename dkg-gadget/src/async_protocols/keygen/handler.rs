@@ -17,16 +17,17 @@ use crate::async_protocols::{
 	state_machine::StateMachineHandler, AsyncProtocolParameters, GenericAsyncHandler, KeygenRound,
 	ProtocolType,
 };
+use std::collections::HashMap;
 
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::{
 	Error::ProceedRound, Keygen, ProceedError,
 };
 
-use std::fmt::Debug;
+use std::{fmt::Debug, sync::Arc};
 
-use crate::async_protocols::remote::ShutdownReason;
+use crate::{async_protocols::remote::ShutdownReason, utils::bad_actors_to_authorities};
 use dkg_primitives::types::DKGError;
-use dkg_runtime_primitives::MaxAuthorities;
+use dkg_runtime_primitives::{crypto::AuthorityId, MaxAuthorities, SessionId};
 use futures::FutureExt;
 
 impl<Out: Send + Debug + 'static> GenericAsyncHandler<'static, Out>
@@ -41,6 +42,8 @@ where
 		keygen_protocol_hash: [u8; 32],
 	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
 		let status_handle = params.handle.clone();
+		let mapping = status_handle.index_to_authority_mapping.clone();
+
 		let mut stop_rx =
 			status_handle.stop_rx.lock().take().ok_or_else(|| DKGError::GenericError {
 				reason: "execute called twice with the same AsyncProtocol Parameters".to_string(),
@@ -53,11 +56,15 @@ where
 
 		let logger0 = params.logger.clone();
 		let logger1 = params.logger.clone();
+		let session_id = params.session_id;
+		let bad_actors_rx = params.handle.current_round_blame.clone();
 
 		let protocol = async move {
-			params.logger.info_keygen(
-				"Will execute keygen since local is in best authority set".to_string(),
-			);
+			params.logger.info_keygen(format!(
+				"Will execute keygen since local is in best authority set len={} | {:?}",
+				params.best_authorities.len(),
+				params.best_authorities
+			));
 			let t = threshold;
 			let n = params.best_authorities.len() as u16;
 			// wait for the start signal
@@ -97,7 +104,12 @@ where
 						if res1 == ShutdownReason::DropCode {
 							Ok(())
 						} else {
-							Err(DKGError::GenericError { reason: "Keygen has stalled".into() })
+							let bad_actors = bad_actors_rx.borrow().blamed_parties.clone();
+							let bad_actors = bad_actors_to_authorities(bad_actors, &mapping);
+							Err(DKGError::KeygenTimeout {
+								session_id,
+								bad_actors
+							})
 						}
 					} else {
 						Ok(())
@@ -119,6 +131,9 @@ where
 	{
 		let i = params.party_i;
 		let associated_round_id = params.associated_block_id;
+		let session_id = params.session_id;
+		let mapping = params.handle.index_to_authority_mapping.clone();
+
 		let channel_type: ProtocolType<
 			<BI as BlockchainInterface>::BatchId,
 			<BI as BlockchainInterface>::MaxProposalLength,
@@ -132,10 +147,12 @@ where
 			associated_block_id: associated_round_id,
 			keygen_protocol_hash,
 		};
+
 		new_inner(
 			(),
-			Keygen::new(*i.as_ref(), t, n)
-				.map_err(|err| Self::map_keygen_error_to_dkg_error_keygen(err))?,
+			Keygen::new(*i.as_ref(), t, n).map_err(|err| {
+				Self::map_keygen_error_to_dkg_error_keygen(err, session_id, &mapping)
+			})?,
 			params,
 			channel_type,
 		)
@@ -143,24 +160,33 @@ where
 
 	fn map_keygen_error_to_dkg_error_keygen(
 		error : multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::Error,
+		session_id: SessionId,
+		mapping: &Arc<HashMap<usize, AuthorityId>>,
 	) -> DKGError {
 		match error {
 			// extract the bad actors from error messages
 			ProceedRound(ProceedError::Round2VerifyCommitments(e)) =>
 				DKGError::KeygenMisbehaviour {
 					reason: e.error_type.to_string(),
-					bad_actors: e.bad_actors,
+					bad_actors: bad_actors_to_authorities(e.bad_actors, mapping),
+					session_id,
 				},
 			ProceedRound(ProceedError::Round3VerifyVssConstruct(e)) =>
 				DKGError::KeygenMisbehaviour {
 					reason: e.error_type.to_string(),
-					bad_actors: e.bad_actors,
+					bad_actors: bad_actors_to_authorities(e.bad_actors, mapping),
+					session_id,
 				},
 			ProceedRound(ProceedError::Round4VerifyDLogProof(e)) => DKGError::KeygenMisbehaviour {
 				reason: e.error_type.to_string(),
-				bad_actors: e.bad_actors,
+				bad_actors: bad_actors_to_authorities(e.bad_actors, mapping),
+				session_id,
 			},
-			_ => DKGError::KeygenMisbehaviour { reason: error.to_string(), bad_actors: vec![] },
+			_ => DKGError::KeygenMisbehaviour {
+				reason: error.to_string(),
+				bad_actors: vec![],
+				session_id,
+			},
 		}
 	}
 }

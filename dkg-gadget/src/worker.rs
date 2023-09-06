@@ -25,11 +25,13 @@ use sc_network_sync::SyncingService;
 use sp_consensus::SyncOracle;
 
 use crate::signing_manager::SigningManager;
+use dkg_primitives::types::SSID;
 use futures::StreamExt;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 use parking_lot::{Mutex, RwLock};
 use sc_client_api::{Backend, FinalityNotification};
 use sc_keystore::LocalKeystore;
+use sp_api::ApiError;
 use sp_arithmetic::traits::SaturatedConversion;
 use sp_core::ecdsa;
 use sp_runtime::traits::{Block, Get, Header, NumberFor};
@@ -50,7 +52,7 @@ use dkg_runtime_primitives::{
 	utils::to_slice_33,
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, BatchId, DKGApi,
 	MaxAuthorities, MaxProposalLength, MaxProposalsInBatch, MaxReporters, MaxSignatureLength,
-	GENESIS_AUTHORITY_SET_ID,
+	StoredUnsignedProposalBatch, GENESIS_AUTHORITY_SET_ID,
 };
 
 pub use crate::constants::worker::*;
@@ -67,7 +69,7 @@ use crate::{
 	keystore::DKGKeystore,
 	metric_inc, metric_set,
 	metrics::Metrics,
-	utils::find_authorities_change,
+	utils::{find_authorities_change, generate_authority_mapping},
 	Client,
 };
 
@@ -140,7 +142,7 @@ where
 
 #[derive(Clone)]
 pub(crate) struct ErrorHandlerChannel {
-	pub tx: tokio::sync::mpsc::UnboundedSender<DKGError>,
+	pub tx: UnboundedSender<DKGError>,
 	rx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<DKGError>>>>,
 }
 
@@ -305,7 +307,7 @@ where
 		stage: ProtoStageType,
 		protocol_name: &str,
 		associated_block: NumberFor<B>,
-		ssid: u8,
+		ssid: SSID,
 	) -> Result<
 		AsyncProtocolParameters<
 			DKGProtocolEngine<
@@ -328,12 +330,17 @@ where
 
 		let now = self.get_latest_block_number();
 		let associated_block_id: u64 = associated_block.saturated_into();
+
+		let authority_mapping = generate_authority_mapping(&best_authorities, stage);
+
 		let status_handle = AsyncProtocolRemote::new(
 			now,
 			session_id,
 			self.logger.clone(),
 			associated_block_id,
 			ssid,
+			stage,
+			authority_mapping,
 		);
 		// Fetch the active key. This requires rotating the key to have happened with
 		// full certainty in order to ensure the right key is being used to make signatures.
@@ -448,6 +455,24 @@ where
 		}
 
 		None
+	}
+
+	/// Get the keygen threshold at a specific block
+	pub async fn get_keygen_threshold(&self, header: &B::Header) -> u16 {
+		let at = header.hash();
+		self.exec_client_function(move |client| {
+			client.runtime_api().keygen_threshold(at).unwrap_or_default()
+		})
+		.await
+	}
+
+	/// Get the next keygen threshold at a specific block
+	pub async fn get_next_keygen_threshold(&self, header: &B::Header) -> u16 {
+		let at = header.hash();
+		self.exec_client_function(move |client| {
+			client.runtime_api().next_keygen_threshold(at).unwrap_or_default()
+		})
+		.await
 	}
 
 	/// Get the signature threshold at a specific block
@@ -641,7 +666,7 @@ where
 			self.keygen_manager.on_block_finalized(header, self).await;
 		} else {
 			// maybe update the internal state of the worker
-			self.maybe_update_worker_state(header).await;
+			self.maybe_rotate_local_session(header).await;
 			self.keygen_manager.on_block_finalized(header, self).await;
 			if let Err(e) = self.signing_manager.on_block_finalized(header, self).await {
 				self.logger
@@ -671,7 +696,7 @@ where
 		}
 	}
 
-	async fn maybe_update_worker_state(&self, header: &B::Header) {
+	async fn maybe_rotate_local_session(&self, header: &B::Header) {
 		if let Some((active, queued)) = self.validator_set(header).await {
 			self.logger.debug(format!("🕸️  ACTIVE SESSION ID {:?}", active.id));
 			metric_set!(self, dkg_validator_set_id, active.id);
@@ -788,38 +813,26 @@ where
 	pub async fn handle_dkg_error(&self, dkg_error: DKGError) {
 		self.logger.error(format!("Received error: {dkg_error:?}"));
 		metric_inc!(self, dkg_error_counter);
-		let authorities: Vec<Public> =
-			self.best_authorities.read().iter().map(|x| x.1.clone()).collect();
 
-		let (bad_actors, session_id) = match dkg_error {
-			DKGError::KeygenMisbehaviour { ref bad_actors, .. } => {
+		let (offenders, session_id) = match dkg_error {
+			DKGError::KeygenMisbehaviour { ref bad_actors, session_id, .. } => {
 				metric_inc!(self, dkg_keygen_misbehaviour_error);
-				(bad_actors.clone(), 0)
+				(bad_actors.clone(), session_id)
 			},
 			DKGError::KeygenTimeout { ref bad_actors, session_id, .. } => {
 				metric_inc!(self, dkg_keygen_timeout_error);
 				(bad_actors.clone(), session_id)
 			},
 			// Todo: Handle Signing Timeout as a separate case
-			DKGError::SignMisbehaviour { ref bad_actors, .. } => {
+			DKGError::SignMisbehaviour { ref bad_actors, session_id, .. } => {
 				metric_inc!(self, dkg_sign_misbehaviour_error);
-				(bad_actors.clone(), 0)
+				(bad_actors.clone(), session_id)
 			},
 			_ => Default::default(),
 		};
 
 		self.logger
-			.error(format!("Bad Actors : {bad_actors:?}, Session Id : {session_id:?}"));
-
-		let mut offenders: Vec<AuthorityId> = Vec::new();
-		for bad_actor in bad_actors {
-			let bad_actor = bad_actor;
-			if bad_actor > 0 && bad_actor <= authorities.len() {
-				if let Some(offender) = authorities.get(bad_actor - 1) {
-					offenders.push(offender.clone());
-				}
-			}
-		}
+			.error(format!("Bad Actors : {offenders:?}, Session Id : {session_id:?}"));
 
 		for offender in offenders {
 			match dkg_error {
@@ -963,47 +976,6 @@ where
 		Ok(Public::from(signer))
 	}
 
-	fn get_jailed_signers_inner(
-		&self,
-		best_authorities: &[Public],
-	) -> Result<Vec<Public>, DKGError> {
-		let now = self.latest_header.read().clone().ok_or_else(|| DKGError::CriticalError {
-			reason: "latest header does not exist!".to_string(),
-		})?;
-		let at = now.hash();
-		Ok(self
-			.client
-			.runtime_api()
-			.get_signing_jailed(at, best_authorities.to_vec())
-			.unwrap_or_default())
-	}
-	pub(crate) fn get_unjailed_signers(
-		&self,
-		best_authorities: &[Public],
-	) -> Result<Vec<u16>, DKGError> {
-		let jailed_signers = self.get_jailed_signers_inner(best_authorities)?;
-		Ok(best_authorities
-			.iter()
-			.enumerate()
-			.filter(|(_, key)| !jailed_signers.contains(key))
-			.map(|(i, _)| u16::try_from(i + 1).unwrap_or_default())
-			.collect())
-	}
-
-	/// Get the jailed signers
-	pub(crate) fn get_jailed_signers(
-		&self,
-		best_authorities: &[Public],
-	) -> Result<Vec<u16>, DKGError> {
-		let jailed_signers = self.get_jailed_signers_inner(best_authorities)?;
-		Ok(best_authorities
-			.iter()
-			.enumerate()
-			.filter(|(_, key)| jailed_signers.contains(key))
-			.map(|(i, _)| u16::try_from(i + 1).unwrap_or_default())
-			.collect())
-	}
-
 	pub async fn should_execute_new_keygen(
 		&self,
 		header: &B::Header,
@@ -1017,6 +989,27 @@ where
 			.await;
 
 		AnticipatedKeygenExecutionStatus { execute, force_execute }
+	}
+
+	pub async fn get_unsigned_proposal_batches(
+		&self,
+		header: &B::Header,
+	) -> Result<
+		Vec<
+			StoredUnsignedProposalBatch<
+				BatchId,
+				MaxProposalLength,
+				MaxProposalsInBatch,
+				<<B as Block>::Header as Header>::Number,
+			>,
+		>,
+		ApiError,
+	> {
+		let at = header.hash();
+		self.exec_client_function(move |client| {
+			client.runtime_api().get_unsigned_proposal_batches(at)
+		})
+		.await
 	}
 
 	/// Wraps the call in a SpawnBlocking task

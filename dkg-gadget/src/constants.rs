@@ -22,6 +22,8 @@ pub mod worker {
 // ============= Signing Manager ======================= //
 
 pub mod signing_manager {
+	use dkg_primitives::types::SSID;
+
 	// the maximum number of tasks that the work manager tries to assign
 	pub const MAX_RUNNING_TASKS: usize = 1;
 
@@ -32,8 +34,9 @@ pub mod signing_manager {
 	// How often to poll the jobs to check completion status
 	pub const JOB_POLL_INTERVAL_IN_MILLISECONDS: u64 = 500;
 
-	// Number of signing sets to generate for every proposal
-	pub const MAX_POTENTIAL_SIGNING_SETS_PER_PROPOSAL: u8 = 2;
+	// Max potential number of signing sets to generate for every proposal (equal to the number of
+	// retries)
+	pub const MAX_POTENTIAL_RETRIES_PER_UNSIGNED_PROPOSAL: SSID = SSID::MAX - 1;
 }
 
 // ============= Networking ======================= //

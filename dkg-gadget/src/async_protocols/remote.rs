@@ -12,14 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{async_protocols::CurrentRoundBlame, debug_logger::DebugLogger};
+use crate::{
+	async_protocols::CurrentRoundBlame, debug_logger::DebugLogger, worker::ProtoStageType,
+};
 use atomic::Atomic;
-use dkg_primitives::types::{DKGError, NetworkMsgPayload, SessionId, SignedDKGMessage};
-use dkg_runtime_primitives::{crypto::Public, KEYGEN_TIMEOUT, SIGN_TIMEOUT};
+use dkg_primitives::types::{DKGError, NetworkMsgPayload, SessionId, SignedDKGMessage, SSID};
+use dkg_runtime_primitives::{
+	crypto::{AuthorityId, Public},
+	KEYGEN_TIMEOUT, SIGN_TIMEOUT,
+};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
-use std::sync::{atomic::Ordering, Arc};
+use std::{
+	collections::HashMap,
+	sync::{atomic::Ordering, Arc},
+};
 
 pub struct AsyncProtocolRemote<C> {
 	pub(crate) status: Arc<Atomic<MetaHandlerStatus>>,
@@ -33,14 +41,18 @@ pub struct AsyncProtocolRemote<C> {
 	pub(crate) stop_rx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<ShutdownReason>>>>,
 	pub(crate) started_at: C,
 	pub(crate) is_primary_remote: bool,
-	current_round_blame: tokio::sync::watch::Receiver<CurrentRoundBlame>,
+	pub(crate) current_round_blame: tokio::sync::watch::Receiver<CurrentRoundBlame>,
 	pub(crate) current_round_blame_tx: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
 	pub(crate) session_id: SessionId,
 	pub(crate) associated_block_id: u64,
 	/// The signing set index. For keygen, this is always 0
-	pub(crate) ssid: u8,
+	pub(crate) ssid: SSID,
 	pub(crate) logger: DebugLogger,
 	status_history: Arc<Mutex<Vec<MetaHandlerStatus>>>,
+	/// Contains the mapping of index to authority id for this specific protocol. Varies between
+	/// protocols
+	pub(crate) index_to_authority_mapping: Arc<HashMap<usize, AuthorityId>>,
+	pub(crate) proto_stage_type: ProtoStageType,
 }
 
 type MessageReceiverHandle =
@@ -77,6 +89,8 @@ impl<C: Clone> Clone for AsyncProtocolRemote<C> {
 			status_history: self.status_history.clone(),
 			associated_block_id: self.associated_block_id,
 			ssid: self.ssid,
+			proto_stage_type: self.proto_stage_type,
+			index_to_authority_mapping: self.index_to_authority_mapping.clone(),
 		}
 	}
 }
@@ -104,7 +118,9 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 		session_id: SessionId,
 		logger: DebugLogger,
 		associated_block_id: u64,
-		ssid: u8,
+		ssid: SSID,
+		proto_stage_type: ProtoStageType,
+		index_to_authority_mapping: Arc<HashMap<usize, AuthorityId>>,
 	) -> Self {
 		let (stop_tx, stop_rx) = tokio::sync::mpsc::unbounded_channel();
 		let (tx_keygen_signing, rx_keygen_signing) = tokio::sync::mpsc::unbounded_channel();
@@ -121,6 +137,7 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 			status,
 			tx_keygen_signing,
 			tx_voting,
+			proto_stage_type,
 			rx_keygen_signing: Arc::new(Mutex::new(Some(rx_keygen_signing))),
 			rx_voting: Arc::new(Mutex::new(Some(rx_voting))),
 			status_history,
@@ -136,6 +153,7 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 			session_id,
 			associated_block_id,
 			ssid,
+			index_to_authority_mapping,
 		}
 	}
 
