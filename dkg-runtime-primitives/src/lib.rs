@@ -83,10 +83,10 @@ pub type MmrRootHash = H256;
 pub const GENESIS_AUTHORITY_SET_ID: u64 = 0;
 
 /// The keygen timeout limit in blocks before we consider misbehaviours
-pub const KEYGEN_TIMEOUT: u32 = 3;
+pub const KEYGEN_TIMEOUT: u32 = 10;
 
 /// The sign timeout limit in blocks before we consider proposal as stalled
-pub const SIGN_TIMEOUT: u32 = 3;
+pub const SIGN_TIMEOUT: u32 = 10;
 
 /// So long as the associated block id is within this tolerance, we consider the message as
 /// deliverable. This should be less than the SIGN_TIMEOUT
