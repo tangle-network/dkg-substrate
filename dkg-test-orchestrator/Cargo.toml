@@ -12,7 +12,7 @@ debug-tracing = ["dkg-gadget/debug-tracing"]
 tokio = { workspace = true, features = ["rt-multi-thread", "fs", "macros", "process"] }
 toml = { workspace = true, features = ["parse"] }
 dkg-mock-blockchain = { workspace = true }
-dkg-logging = { workspace = true }
+dkg-logging = { workspace = true, features = ["full"] }
 dkg-gadget = { workspace = true, features = ["testing"] }
 structopt = { workspace = true }
 log = { workspace = true }

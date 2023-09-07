@@ -65,7 +65,7 @@ dkg-gadget = { workspace = true }
 dkg-runtime-primitives = { workspace = true }
 dkg-primitives = { workspace = true }
 dkg-standalone-runtime = { workspace = true }
-dkg-logging = { workspace = true }
+dkg-logging = { workspace = true, features = ["full"] }
 webb-relayer-gadget = { workspace = true }
 webb-relayer-gadget-cli = { workspace = true }
 tokio = { workspace = true, features = ["rt"] }

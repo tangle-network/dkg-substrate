@@ -64,7 +64,7 @@ webb-proposals = { workspace = true }
 # Local dependencies
 dkg-runtime-primitives = { workspace = true }
 dkg-primitives = { workspace = true }
-dkg-logging = { workspace = true }
+dkg-logging = { workspace = true, features = ["full"] }
 dkg-mock-blockchain = { workspace = true }
 
 tracing = { workspace = true, optional = true }

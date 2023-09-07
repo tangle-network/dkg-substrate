@@ -16,32 +16,37 @@ command = "cargo"
 args = ["build", "-rp", "dkg-standalone-node", "--features=integration-tests,testing"]
 
 [tasks.alice]
-dependencies = ["build-test"]
+condition = { files_exist = ["${CARGO_MAKE_WORKING_DIRECTORY}/target/release/dkg-standalone-node"] }
 description = "Run Alice node (the bootnode)"
 command = "./target/release/dkg-standalone-node"
 args = ["--tmp", "--chain", "local", "--validator", "-lerror", "--alice", "--output-path=./tmp/alice/output.log", "--rpc-cors", "all", "--rpc-external", "--rpc-methods=unsafe", "--port", "30333", "--rpc-port", "9944", "--node-key", "0000000000000000000000000000000000000000000000000000000000000001"]
 
 [tasks.bob]
-dependencies = ["build-test"]
 description = "Run Bob node"
+condition = { files_exist = ["${CARGO_MAKE_WORKING_DIRECTORY}/target/release/dkg-standalone-node"] }
 command = "./target/release/dkg-standalone-node"
 args = ["--tmp", "--chain", "local", "--validator", "-lerror", "--bob", "--output-path=./tmp/bob/output.log", "--rpc-cors", "all", "--rpc-external", "--rpc-methods=unsafe", "--port", "30305", "--rpc-port", "9945", "--bootnodes", "/ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp"]
 
 [tasks.charlie]
-dependencies = ["build-test"]
 description = "Run Charlie node"
+condition = { files_exist = ["${CARGO_MAKE_WORKING_DIRECTORY}/target/release/dkg-standalone-node"] }
 command = "./target/release/dkg-standalone-node"
 args = ["--tmp", "--chain", "local", "--validator", "-lerror", "--charlie", "--output-path=./tmp/charlie/output.log", "--rpc-cors", "all", "--rpc-external", "--rpc-methods=unsafe", "--port", "30306", "--rpc-port", "9946", "--bootnodes", "/ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp"]
 
 [tasks.dave]
-dependencies = ["build-test"]
 description = "Run Dave node"
+condition = { files_exist = ["${CARGO_MAKE_WORKING_DIRECTORY}/target/release/dkg-standalone-node"] }
 command = "./target/release/dkg-standalone-node"
 args = ["--tmp", "--chain", "local", "--validator", "-lerror", "--dave", "--output-path=./tmp/dave/output.log", "--rpc-cors", "all", "--rpc-external", "--rpc-methods=unsafe", "--port", "30307", "--rpc-port", "9947", "--bootnodes", "/ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp"]
 
 [tasks.eve]
-dependencies = ["build-test"]
 description = "Run Eve node"
+condition = { files_exist = ["${CARGO_MAKE_WORKING_DIRECTORY}/target/release/dkg-standalone-node"] }
 command = "./target/release/dkg-standalone-node"
 args = ["--tmp", "--chain", "local", "--validator", "-lerror", "--eve", "--output-path=./tmp/eve/output.log", "--rpc-cors", "all", "--rpc-external", "--rpc-methods=unsafe", "--port", "30308", "--rpc-port", "9948", "--bootnodes", "/ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp"]
 
+[tasks.ferdie]
+description = "Run Ferdie node"
+condition = { files_exist = ["${CARGO_MAKE_WORKING_DIRECTORY}/target/release/dkg-standalone-node"] }
+command = "./target/release/dkg-standalone-node"
+args = ["--tmp", "--chain", "local", "--validator", "-lerror", "--ferdie", "--output-path=./tmp/ferdie/output.log", "--rpc-cors", "all", "--rpc-external", "--rpc-methods=unsafe", "--port", "30309", "--rpc-port", "9949", "--bootnodes", "/ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp"]
