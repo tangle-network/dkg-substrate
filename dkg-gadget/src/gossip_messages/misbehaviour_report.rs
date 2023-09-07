@@ -173,7 +173,7 @@ where
 					report.session_id,
 					encoded_signed_dkg_message.len()
 				));
-				if let Err(e) = dkg_worker.keygen_gossip_engine.gossip(signed_dkg_message) {
+				if let Err(e) = dkg_worker.gossip_engine.gossip(signed_dkg_message) {
 					dkg_worker.logger.error(format!(
 						"💀  (Round: {:?}) Failed to gossip misbehaviour message: {:?}",
 						report.session_id, e

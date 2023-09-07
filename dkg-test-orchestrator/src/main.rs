@@ -70,8 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 	// the gossip engine and the dummy api share a state between ALL clients in this process
 	// we will use the SAME gossip engine for both keygen and signing
-	let keygen_gossip_engine = &InMemoryGossipEngine::new();
-	let signing_gossip_engine = &InMemoryGossipEngine::new();
+	let gossip_engine = &InMemoryGossipEngine::new();
 	let keygen_t = t as u16;
 	let keygen_n = n_clients as u16;
 	let signing_t = t as u16;
@@ -134,18 +133,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		// output the logs for this specific peer to a file
 		let output = args.tmp_path.join(format!("{peer_id}.log"));
 		let logger = dkg_gadget::debug_logger::DebugLogger::new(peer_id, Some(output))?;
-		let keygen_gossip_engine = keygen_gossip_engine.clone_for_new_peer(
+		let gossip_engine = gossip_engine.clone_for_new_peer(
 			api,
 			n_blocks as _,
 			peer_id,
 			public_key.clone(),
-			&logger,
-		);
-		let signing_gossip_engine = signing_gossip_engine.clone_for_new_peer(
-			api,
-			n_blocks as _,
-			peer_id,
-			public_key,
 			&logger,
 		);
 
@@ -179,8 +171,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 				client,
 				backend,
 				key_store,
-				keygen_gossip_engine,
-				signing_gossip_engine,
+				gossip_engine,
 				db_backend,
 				metrics,
 				local_keystore,

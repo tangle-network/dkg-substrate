@@ -83,8 +83,7 @@ where
 	pub client: Arc<C>,
 	pub backend: Arc<BE>,
 	pub key_store: DKGKeystore,
-	pub keygen_gossip_engine: GE,
-	pub signing_gossip_engine: GE,
+	pub gossip_engine: GE,
 	pub db_backend: Arc<dyn crate::db::DKGDbBackend>,
 	pub metrics: Option<Metrics>,
 	pub local_keystore: Option<Arc<LocalKeystore>>,
@@ -106,8 +105,7 @@ where
 	pub client: Arc<C>,
 	pub backend: Arc<BE>,
 	pub key_store: DKGKeystore,
-	pub keygen_gossip_engine: Arc<GE>,
-	pub signing_gossip_engine: Arc<GE>,
+	pub gossip_engine: Arc<GE>,
 	pub db: Arc<dyn crate::db::DKGDbBackend>,
 	pub metrics: Arc<Option<Metrics>>,
 	/// Cached best authorities
@@ -169,8 +167,7 @@ where
 			backend: self.backend.clone(),
 			key_store: self.key_store.clone(),
 			db: self.db.clone(),
-			keygen_gossip_engine: self.keygen_gossip_engine.clone(),
-			signing_gossip_engine: self.signing_gossip_engine.clone(),
+			gossip_engine: self.gossip_engine.clone(),
 			metrics: self.metrics.clone(),
 			best_authorities: self.best_authorities.clone(),
 			next_best_authorities: self.next_best_authorities.clone(),
@@ -220,8 +217,7 @@ where
 			backend,
 			key_store,
 			db_backend,
-			keygen_gossip_engine,
-			signing_gossip_engine,
+			gossip_engine,
 			metrics,
 			local_keystore,
 			latest_header,
@@ -246,8 +242,7 @@ where
 			key_store,
 			db: db_backend,
 			keygen_manager,
-			keygen_gossip_engine: Arc::new(keygen_gossip_engine),
-			signing_gossip_engine: Arc::new(signing_gossip_engine),
+			gossip_engine: Arc::new(gossip_engine),
 			metrics: Arc::new(metrics),
 			best_authorities: Arc::new(RwLock::new(vec![])),
 			next_best_authorities: Arc::new(RwLock::new(vec![])),
@@ -305,7 +300,6 @@ where
 		party_i: KeygenPartyId,
 		session_id: SessionId,
 		stage: ProtoStageType,
-		protocol_name: &str,
 		associated_block: NumberFor<B>,
 		ssid: SSID,
 	) -> Result<
@@ -365,7 +359,7 @@ where
 				client: self.client.clone(),
 				keystore: self.key_store.clone(),
 				db: self.db.clone(),
-				gossip_engine: self.get_gossip_engine_from_protocol_name(protocol_name),
+				gossip_engine: self.gossip_engine.clone(),
 				aggregated_public_keys: self.aggregated_public_keys.clone(),
 				best_authorities: best_authorities.clone(),
 				authority_public_key: authority_public_key.clone(),
@@ -404,15 +398,6 @@ where
 				));
 				Ok(params)
 			},
-		}
-	}
-
-	/// Returns the gossip engine based on the protocol_name
-	fn get_gossip_engine_from_protocol_name(&self, protocol_name: &str) -> Arc<GE> {
-		match protocol_name {
-			crate::DKG_KEYGEN_PROTOCOL_NAME => self.keygen_gossip_engine.clone(),
-			crate::DKG_SIGNING_PROTOCOL_NAME => self.signing_gossip_engine.clone(),
-			_ => panic!("Protocol name not found!"),
 		}
 	}
 
@@ -1050,90 +1035,68 @@ where
 		// We run all these tasks in parallel and wait for any of them to complete.
 		// If any of them completes, we stop all the other tasks since this means a fatal error has
 		// occurred and we need to shut down.
-		let (first, n, ..) = futures::future::select_all(vec![
-			self.spawn_finality_notification_task(),
-			self.spawn_keygen_messages_stream_task(),
-			self.spawn_signing_messages_stream_task(),
-			self.spawn_error_handling_task(),
-		])
-		.await;
+		let finality_notification_task = self.finality_notification_task();
+		let gossip_engine_stream_task = self.gossip_engine_message_stream_task();
+		let error_handling_task = self.spawn_error_handling_task();
+
+		let res = tokio::select! {
+			res0 = finality_notification_task => res0,
+			res1 = gossip_engine_stream_task => res1,
+			res2 = error_handling_task => res2,
+		};
+
 		self.logger
-			.error(format!("DKG Worker finished; the reason that task({n}) ended with: {first:?}"));
+			.error(format!("DKG Worker finished prematurely. The cause: {res:?}"));
 	}
 
-	fn spawn_finality_notification_task(&self) -> tokio::task::JoinHandle<()> {
+	async fn finality_notification_task(&self) -> Result<(), DKGError> {
 		let mut stream = self.client.finality_notification_stream();
-		let self_ = self.clone();
-		tokio::spawn(async move {
-			while let Some(notification) = stream.next().await {
-				dkg_logging::debug!("Going to handle Finality notification");
-				self_.handle_finality_notification(notification).await;
-			}
 
-			self_.logger.error("Finality notification stream ended");
-		})
+		while let Some(notification) = stream.next().await {
+			dkg_logging::debug!("Going to handle Finality notification");
+			self.handle_finality_notification(notification).await;
+		}
+
+		self.logger.error("Finality notification stream ended");
+
+		Err(DKGError::CriticalError { reason: "Finality notification stream ended".to_string() })
 	}
 
-	fn spawn_keygen_messages_stream_task(&self) -> tokio::task::JoinHandle<()> {
-		let keygen_gossip_engine = self.keygen_gossip_engine.clone();
-		let mut keygen_stream =
-			keygen_gossip_engine.get_stream().expect("keygen gossip stream already taken");
-		let self_ = self.clone();
-		tokio::spawn(async move {
-			while let Some(msg) = keygen_stream.recv().await {
-				let msg_hash = crate::debug_logger::raw_message_to_hash(msg.msg.payload.payload());
-				self_.logger.debug(format!(
-					"Going to handle keygen message for session {} | hash: {msg_hash}",
-					msg.msg.session_id
-				));
-				self_.logger.checkpoint_message_raw(msg.msg.payload.payload(), "CP1-keygen");
-				match self_.process_incoming_dkg_message(msg).await {
-					Ok(_) => {},
-					Err(e) => {
-						self_.logger.error(format!("Error processing keygen message: {e:?}"));
-					},
-				}
+	async fn gossip_engine_message_stream_task(&self) -> Result<(), DKGError> {
+		let mut stream =
+			self.gossip_engine.get_stream().expect("keygen gossip stream already taken");
+
+		while let Some(msg) = stream.recv().await {
+			let msg_hash = crate::debug_logger::raw_message_to_hash(msg.msg.payload.payload());
+			self.logger.debug(format!(
+				"Going to handle message for session {} | hash: {msg_hash}",
+				msg.msg.session_id
+			));
+			self.logger.checkpoint_message_raw(msg.msg.payload.payload(), "CP1-incoming");
+			match self.process_incoming_dkg_message(msg).await {
+				Ok(_) => {},
+				Err(e) => {
+					self.logger.error(format!("Error processing keygen message: {e:?}"));
+				},
 			}
-		})
+		}
+
+		Err(DKGError::CriticalError { reason: "Gossip engine stream ended".to_string() })
 	}
 
-	fn spawn_signing_messages_stream_task(&self) -> tokio::task::JoinHandle<()> {
-		let signing_gossip_engine = self.signing_gossip_engine.clone();
-		let mut signing_stream =
-			signing_gossip_engine.get_stream().expect("signing gossip stream already taken");
-		let self_ = self.clone();
-		tokio::spawn(async move {
-			while let Some(msg) = signing_stream.recv().await {
-				self_.logger.debug(format!(
-					"Going to handle signing message for session {}",
-					msg.msg.session_id
-				));
-				self_.logger.checkpoint_message_raw(msg.msg.payload.payload(), "CP1-signing");
-				match self_.process_incoming_dkg_message(msg).await {
-					Ok(_) => {},
-					Err(e) => {
-						self_.logger.error(format!("Error processing signing message: {e:?}"));
-					},
-				}
-			}
-		})
-	}
-
-	fn spawn_error_handling_task(&self) -> tokio::task::JoinHandle<()> {
-		let self_ = self.clone();
+	async fn spawn_error_handling_task(&self) -> Result<(), DKGError> {
 		let mut error_handler_rx = self
 			.error_handler_channel
 			.rx
 			.lock()
 			.take()
 			.expect("Error handler tx already taken");
-		let logger = self.logger.clone();
-		tokio::spawn(async move {
-			while let Some(error) = error_handler_rx.recv().await {
-				logger.debug("Going to handle Error");
-				self_.handle_dkg_error(error).await;
-			}
-		})
+		while let Some(error) = error_handler_rx.recv().await {
+			self.logger.debug("Going to handle Error");
+			self.handle_dkg_error(error).await;
+		}
+
+		Err(DKGError::CriticalError { reason: "Error handler stream ended".to_string() })
 	}
 }
 
