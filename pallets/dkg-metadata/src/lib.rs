@@ -141,6 +141,12 @@ use sp_std::{
 use types::RoundMetadata;
 use weights::WeightInfo;
 
+// Reputation assigned to genesis authorities
+pub const INITIAL_REPUTATION: u32 = 1_000_000_000;
+
+// Reputation increase awarded to authorities on submission of next public key
+pub const REPUTATION_INCREMENT: u32 = INITIAL_REPUTATION / 1000;
+
 #[cfg(test)]
 mod mock;
 pub mod types;
@@ -920,7 +926,7 @@ pub mod pallet {
 						let reputation = AuthorityReputations::<T>::get(authority.clone());
 						AuthorityReputations::<T>::insert(
 							authority,
-							decay.mul_floor(reputation).saturating_add(1_000_000_000u32.into()),
+							decay.mul_floor(reputation).saturating_add(INITIAL_REPUTATION.into()),
 						);
 					}
 
@@ -973,6 +979,16 @@ pub mod pallet {
 						let bounded_key: BoundedVec<_, _> =
 							key.clone().try_into().map_err(|_| Error::<T>::OutOfBounds)?;
 						NextDKGPublicKey::<T>::put((Self::next_authority_set_id(), bounded_key));
+
+						// bump reputation for all accounts
+						for authority in accounts {
+							let reputation = AuthorityReputations::<T>::get(authority.clone());
+							AuthorityReputations::<T>::insert(
+								authority,
+								reputation.saturating_add(REPUTATION_INCREMENT.into()),
+							);
+						}
+
 						Self::deposit_event(Event::NextPublicKeySubmitted {
 							compressed_pub_key: key.clone(),
 						});
