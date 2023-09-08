@@ -40,7 +40,7 @@ jobs:
             ~/.cargo/registry
             target/release
             target/debug
-          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-harness-stress-tests
+          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-local-chain-tests
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -64,4 +64,4 @@ jobs:
             ~/.cargo/registry
             target/release
             target/debug
-          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-harness-stress-tests
+          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-local-chain-tests
