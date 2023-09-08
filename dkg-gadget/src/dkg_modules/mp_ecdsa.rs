@@ -5,11 +5,12 @@ use crate::{
 	},
 	gossip_engine::GossipEngineIface,
 	keygen_manager::KeygenState,
+	signing_manager::SigningResult,
 	worker::{DKGWorker, ProtoStageType},
 	Client,
 };
 use async_trait::async_trait;
-use dkg_primitives::types::DKGError;
+use dkg_primitives::types::{DKGError, SSID};
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi, MaxAuthorities, MaxProposalLength};
 use sc_client_api::Backend;
 use sp_runtime::traits::{Block, NumberFor};
@@ -50,7 +51,7 @@ where
 			keygen_protocol_hash,
 		} = params
 		{
-			const KEYGEN_SSID: u8 = 0;
+			const KEYGEN_SSID: SSID = 0;
 			match self.dkg_worker.generate_async_proto_params(
 				best_authorities,
 				authority_public_key,
@@ -155,6 +156,7 @@ where
 			signing_set,
 			associated_block_id,
 			ssid,
+			unsigned_proposal_hash,
 		} = params
 		{
 			self.dkg_worker.logger.debug(format!("{party_i:?} All Parameters: {best_authorities:?} | authority_pub_key: {authority_public_key:?} | session_id: {session_id:?} | threshold: {threshold:?} | stage: {stage:?} | unsigned_proposal_batch: {unsigned_proposal_batch:?} | signing_set: {signing_set:?} | associated_block_id: {associated_block_id:?}"));
@@ -179,15 +181,27 @@ where
 				signing_set,
 			)?;
 			let logger = self.dkg_worker.logger.clone();
+			let signing_manager = self.dkg_worker.signing_manager.clone();
 			let task = async move {
 				match meta_handler.await {
 					Ok(_) => {
-						logger.info("The meta handler has executed successfully".to_string());
+						logger.info("The meta handler has executed successfully");
+						signing_manager
+							.update_local_signing_set_state(SigningResult::Success {
+								unsigned_proposal_hash,
+							})
+							.await;
 						Ok(())
 					},
 
 					Err(err) => {
 						logger.error(format!("Error executing meta handler {:?}", &err));
+						signing_manager
+							.update_local_signing_set_state(SigningResult::Failure {
+								unsigned_proposal_hash,
+								ssid,
+							})
+							.await;
 						let _ = err_handler_tx.send(err.clone());
 						Err(err)
 					},

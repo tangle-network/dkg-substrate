@@ -7,7 +7,7 @@ use crate::{
 };
 use dkg_primitives::{
 	crypto::Public,
-	types::{DKGError, SignedDKGMessage},
+	types::{DKGError, SignedDKGMessage, SSID},
 };
 use dkg_runtime_primitives::{associated_block_id_acceptable, SessionId};
 use parking_lot::RwLock;
@@ -43,7 +43,7 @@ pub struct WorkManagerInner<B: BlockT> {
 	pub active_tasks: HashSet<Job<B>>,
 	pub enqueued_tasks: VecDeque<Job<B>>,
 	// task hash => SSID => enqueued messages
-	pub enqueued_messages: HashMap<[u8; 32], HashMap<u8, VecDeque<SignedDKGMessage<Public>>>>,
+	pub enqueued_messages: HashMap<[u8; 32], HashMap<SSID, VecDeque<SignedDKGMessage<Public>>>>,
 }
 
 #[derive(Debug)]
@@ -116,6 +116,11 @@ impl<B: BlockT> WorkManager<B> {
 		}
 
 		this
+	}
+
+	pub fn clear_enqueued_tasks(&self) {
+		let mut lock = self.inner.write();
+		lock.enqueued_tasks.clear();
 	}
 
 	/// Pushes the task, but does not necessarily start it

@@ -278,6 +278,19 @@ where
 				)
 				.await
 		}
+
+		if matches!(state, KeygenState::Failed { session_id: 1 }) {
+			// If we are at genesis, and we have failed keygen for session 1, we may need to begin a
+			// keygen for session 1
+			return self
+				.maybe_start_keygen_for_stage(
+					KeygenRound::Next,
+					header,
+					dkg_worker,
+					anticipated_execution,
+				)
+				.await
+		}
 	}
 
 	/// Check to see if we need to run a keygen for session 2, 3, 4, .., etc.
@@ -315,7 +328,7 @@ where
 			return
 		}
 
-		if matches!(state, KeygenState::KeygenCompleted { .. }) {
+		if matches!(state, KeygenState::KeygenCompleted { .. } | KeygenState::Failed { .. }) {
 			// We maybe need to start a keygen for session `session_id`:
 			return self
 				.maybe_start_keygen_for_stage(
@@ -428,6 +441,12 @@ where
 			session_id,
 			self.active_keygen_retry_id.load(Ordering::SeqCst),
 		);
+
+		// If we are starting this keygen because of an emergency keygen, clear the unsigned
+		// proposals locally
+		if anticipated_execution_status.force_execute {
+			dkg_worker.signing_manager.clear_enqueued_proposal_tasks();
+		}
 
 		// For now, always use the MpEcdsa variant
 		let params = KeygenProtocolSetupParameters::MpEcdsa {

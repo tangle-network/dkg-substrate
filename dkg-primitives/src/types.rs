@@ -14,7 +14,7 @@
 //
 use codec::{Decode, Encode};
 use curv::elliptic::curves::{Point, Scalar, Secp256k1};
-use dkg_runtime_primitives::{gossip_messages::*, SignerSetId};
+use dkg_runtime_primitives::{crypto::AuthorityId, gossip_messages::*, SignerSetId};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 use sp_runtime::traits::{Block, Hash, Header};
 use std::fmt;
@@ -33,6 +33,8 @@ pub enum DKGMsgStatus {
 	/// Queued round,
 	QUEUED,
 }
+
+pub type SSID = u16;
 
 /// Gossip message struct for all DKG + Webb Protocol messages.
 ///
@@ -53,7 +55,7 @@ pub struct DKGMessage<AuthorityId> {
 	/// The round ID
 	pub associated_block_id: u64,
 	/// The signing set ID
-	pub ssid: u8,
+	pub ssid: SSID,
 }
 
 #[derive(Debug, Clone, Decode, Encode)]
@@ -197,8 +199,8 @@ pub enum DKGResult {
 
 #[derive(Debug, Clone)]
 pub enum DKGError {
-	KeygenMisbehaviour { reason: String, bad_actors: Vec<usize> },
-	KeygenTimeout { session_id: SessionId, bad_actors: Vec<usize> },
+	KeygenMisbehaviour { reason: String, bad_actors: Vec<AuthorityId>, session_id: SessionId },
+	KeygenTimeout { session_id: SessionId, bad_actors: Vec<AuthorityId> },
 	StartKeygen { reason: String },
 	StartOffline { reason: String },
 	CreateOfflineStage { reason: String },
@@ -207,7 +209,7 @@ pub enum DKGError {
 	GenericError { reason: String }, // TODO: handle other
 	NoAuthorityAccounts,
 	NoHeader,
-	SignMisbehaviour { reason: String, bad_actors: Vec<usize> },
+	SignMisbehaviour { reason: String, bad_actors: Vec<AuthorityId>, session_id: SessionId },
 	InvalidPeerId,
 	InvalidSignature,
 	InvalidKeygenPartyId,
@@ -220,7 +222,7 @@ impl fmt::Display for DKGError {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		use DKGError::*;
 		let label = match self {
-			KeygenMisbehaviour { bad_actors, reason } =>
+			KeygenMisbehaviour { bad_actors, reason, .. } =>
 				format!("Keygen misbehaviour: reason: {reason} bad actors: {bad_actors:?}"),
 			KeygenTimeout { bad_actors, session_id } =>
 				format!("Keygen timeout @ Session({session_id}): bad actors: {bad_actors:?}"),
@@ -232,7 +234,7 @@ impl fmt::Display for DKGError {
 			StartOffline { reason } => format!("Unable to start Offline Signing: {reason}"),
 			NoAuthorityAccounts => "No Authority accounts found!".to_string(),
 			NoHeader => "No Header!".to_string(),
-			SignMisbehaviour { reason, bad_actors } =>
+			SignMisbehaviour { reason, bad_actors, .. } =>
 				format!("SignMisbehaviour: reason: {reason},  bad actors: {bad_actors:?}"),
 			InvalidPeerId => "Invalid PeerId!".to_string(),
 			InvalidSignature => "Invalid Signature!".to_string(),

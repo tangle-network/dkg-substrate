@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::worker::ENGINE_ID;
+use crate::worker::{ProtoStageType, ENGINE_ID};
 use dkg_primitives::{
 	crypto::AuthorityId, types::DKGError, AuthoritySet, ConsensusLog, MaxAuthorities,
 };
 use sp_api::{BlockT as Block, HeaderT};
 use sp_runtime::generic::OpaqueDigestItemId;
-use std::{fmt::Debug, future::Future};
+use std::{collections::HashMap, fmt::Debug, future::Future, sync::Arc};
 
 pub trait SendFuture<'a, Out: 'a>: Future<Output = Result<Out, DKGError>> + Send + 'a {}
 impl<'a, T, Out: Debug + Send + 'a> SendFuture<'a, Out> for T where
@@ -91,6 +91,7 @@ pub(crate) fn inspect_outbound(ty: &'static str, serialized_len: usize) {
 #[cfg(not(feature = "outbound-inspection"))]
 pub(crate) fn inspect_outbound(_ty: &str, _serialized_len: usize) {}
 
+use crate::async_protocols::KeygenPartyId;
 use futures::task::Context;
 use tokio::{
 	macros::support::{Pin, Poll},
@@ -126,5 +127,52 @@ impl<F> Future for ExplicitPanicFuture<F> {
 
 			res => Poll::Ready(res),
 		}
+	}
+}
+
+pub fn bad_actors_to_authorities<T: Into<usize> + Debug>(
+	bad_actors: Vec<T>,
+	mapping: &Arc<HashMap<usize, AuthorityId>>,
+) -> Vec<AuthorityId> {
+	let mut ret = Vec::new();
+
+	for bad_actor in bad_actors {
+		if let Some(authority) = mapping.get(&bad_actor.into()) {
+			ret.push(authority.clone());
+		}
+	}
+
+	ret
+}
+
+pub fn generate_authority_mapping(
+	authorities: &Vec<(KeygenPartyId, AuthorityId)>,
+	proto_ty: ProtoStageType,
+) -> Arc<HashMap<usize, AuthorityId>> {
+	match proto_ty {
+		ProtoStageType::KeygenGenesis | ProtoStageType::KeygenStandard => {
+			// Simple mapping. Map the index via as_ref to get the u16
+			Arc::new(
+				authorities
+					.clone()
+					.into_iter()
+					.map(|(idx, auth)| ((*idx.as_ref()) as usize, auth))
+					.collect(),
+			)
+		},
+
+		ProtoStageType::Signing { .. } => {
+			// More complex. We take each party_i = keygen_i from above, then, convert to an offline
+			// stage index via party_i.try_to_offline_party_id
+			let mut ret = HashMap::new();
+			let authorities_only: Vec<KeygenPartyId> = authorities.iter().map(|r| r.0).collect();
+			for (idx, auth) in authorities {
+				if let Ok(offline_index) = idx.try_to_offline_party_id(&authorities_only) {
+					ret.insert(*offline_index.as_ref() as usize, auth.clone());
+				}
+			}
+
+			Arc::new(ret)
+		},
 	}
 }

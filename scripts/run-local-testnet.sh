@@ -4,7 +4,7 @@ set -e
 trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM EXIT
 
 #define default ports
-ports=(30333 30305 30308)
+ports=(30333 30305 30308 30309 30310)
 
 #check to see process is not orphaned or already running
 for port in ${ports[@]}; do
@@ -46,18 +46,28 @@ echo "*** Start Webb DKG Node ***"
 # Alice
 ./target/release/dkg-standalone-node --tmp --chain local --validator -lerror --alice --output-path=./tmp/alice/output.log \
   --rpc-cors all --rpc-external --rpc-methods=unsafe \
-  --port ${ports[0]} \
+  --port 30333 \
   --rpc-port 9944 --node-key 0000000000000000000000000000000000000000000000000000000000000001 &
 # Bob
 ./target/release/dkg-standalone-node --tmp --chain local --validator -lerror --bob --output-path=./tmp/bob/output.log \
   --rpc-cors all --rpc-external --rpc-methods=unsafe \
-  --port ${ports[1]} \
+  --port 30305 \
   --rpc-port 9945 --bootnodes /ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp &
 # Charlie
-./target/release/dkg-standalone-node --tmp --chain local --validator -linfo --charlie --output-path=./tmp/charlie/output.log \
+./target/release/dkg-standalone-node --tmp --chain local --validator -lerror --charlie --output-path=./tmp/charlie/output.log \
+  --rpc-cors all --rpc-external --rpc-methods=unsafe \
+  --port 30308 \
+  --rpc-port 9946 --bootnodes /ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp &
+# Dave
+./target/release/dkg-standalone-node --tmp --chain local --validator -lerror --dave --output-path=./tmp/dave/output.log \
+  --rpc-cors all --rpc-external --rpc-methods=unsafe \
+  --port 30309 \
+  --rpc-port 9947 --bootnodes /ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp &
+# Eve
+./target/release/dkg-standalone-node --tmp --chain local --validator -linfo --eve --output-path=./tmp/eve/output.log \
     --rpc-cors all --rpc-external \
     --rpc-port 9948 \
-    --port ${ports[2]} \
+    --port 30310 \
     -ldkg=debug \
     -ldkg_gadget::worker=debug \
     -lruntime::dkg_metadata=debug \
