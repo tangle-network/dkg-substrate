@@ -31,8 +31,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 async fn main_inner(shutdown: &mut Shutdown) -> Result<(), Box<dyn Error>> {
+	const SESSION_N: u64 = 2;
 	dkg_logging::setup_log();
-	dkg_logging::info!(target: "dkg", "Will test getting to session 3");
+
+	dkg_logging::info!(target: "dkg", "Will test getting to session {SESSION_N}");
 
 	let alice = generate_process("alice", false)?;
 	dkg_logging::info!(target: "dkg", "Spawned Bootnode, now awaiting for initialization");
@@ -52,8 +54,8 @@ async fn main_inner(shutdown: &mut Shutdown) -> Result<(), Box<dyn Error>> {
 	let mut api =
 		Api::<ac_primitives::AssetRuntimeConfig, _>::new(client).expect("Should create API");
 
-	// Wait for the bootnode to get to session 5
-	wait_for_session_3(&mut api).await;
+	// Wait for the bootnode to get to SESSION_N
+	wait_for_session_n(&mut api, SESSION_N).await;
 	Ok(())
 }
 
@@ -87,7 +89,10 @@ async fn generate_websocket_connection_to_bootnode(
 		.await?)
 }
 
-async fn wait_for_session_3(api: &mut Api<AssetRuntimeConfig, JsonrpseeClient>) {
+async fn wait_for_session_n(
+	api: &mut Api<AssetRuntimeConfig, JsonrpseeClient>,
+	session_needed: u64,
+) {
 	let mut has_seen = HashSet::new();
 	let mut listener = DKGEventListener::new();
 	loop {
@@ -109,7 +114,7 @@ async fn wait_for_session_3(api: &mut Api<AssetRuntimeConfig, JsonrpseeClient>) 
 				dkg_logging::info!(target: "dkg", "decoded: {:?}", record.event);
 				let session = listener.on_event_received(&record_str);
 				dkg_logging::info!(target: "dkg", "State: {listener:?}");
-				if session == 3 {
+				if session == session_needed {
 					return
 				}
 			}
