@@ -100,7 +100,7 @@ cargo test
 
 ### Stress Tests
 
-When debugging the internal mechanics of the DKG, it is useful to run the stress tests. These tests are designed to run the DKG with a small number of authorities and a small number of participants. This allows you to quickly debug the DKG without having to setup a local chain.
+When debugging the internal mechanics of the DKG, it is useful to run the stress tests. These tests are designed to run the DKG with a custom number of authorities. This allows you to quickly debug the DKG without having to setup a local chain.
 
 ```
 # Build the dkg-standalone node

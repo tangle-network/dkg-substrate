@@ -1,4 +1,4 @@
-name: harness stress tests
+name: Stress Tests
 
 on:
   push:
@@ -11,9 +11,8 @@ env:
   RUST_LOG: "dkg=trace"
 
 jobs:
-  # dkg-substrate integration tests
   harness:
-    name: harness stress tests
+    name: Harness
     runs-on: ubuntu-latest
     steps:
       - name: Cancel Previous Runs
@@ -46,7 +45,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: nightly
-          
+
       - name: Install Protobuf
         run: sudo apt-get install protobuf-compiler
 

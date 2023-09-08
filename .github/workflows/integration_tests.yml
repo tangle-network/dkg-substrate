@@ -50,10 +50,10 @@ jobs:
       - name: Install cargo make
         run: cargo install --force cargo-make
 
-      - name: Build Release Binary
+      - name: Build Binary
         run: cargo make build-test
 
-      - name: Get To Session 3
+      - name: Run Tests
         run: cargo make integration-tests
 
       - name: Save Cache
