@@ -814,7 +814,6 @@ fn keygen_misbehaviour_reports_does_not_drop_threshold_below_2() {
 	});
 }
 
-// Test that the misbehaviour reports does not drop the thresholds lower than 2
 #[test]
 fn reputation_is_set_correctly() {
 	new_test_ext(vec![1, 2, 3, 4, 5]).execute_with(|| {
