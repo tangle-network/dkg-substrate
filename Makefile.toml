@@ -15,6 +15,11 @@ args = ["clean"]
 command = "cargo"
 args = ["build", "-rp", "dkg-standalone-node", "--features=integration-tests,testing"]
 
+[tasks.integration-tests]
+command = "cargo"
+dependencies = ["clean-tmp"]
+args = ["run", "--bin", "dkg-integration-tests"]
+
 [tasks.alice]
 condition = { files_exist = ["${CARGO_MAKE_WORKING_DIRECTORY}/target/release/dkg-standalone-node"] }
 description = "Run Alice node (the bootnode)"

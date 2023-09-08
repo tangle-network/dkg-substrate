@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 				.expect("Should spawn")
 				.wait()
 				.await
-				.unwrap();
+				.expect("Should exec");
 		}
 
 		member.kill().await.expect("Should kill member");
@@ -48,8 +48,9 @@ async fn main_inner(shutdown: &mut Shutdown) -> Result<(), Box<dyn Error>> {
 	shutdown.members = vec![alice, bob, charlie, dave, eve];
 
 	// Setup API
-	let client = JsonrpseeClient::with_default_url().unwrap();
-	let mut api = Api::<ac_primitives::AssetRuntimeConfig, _>::new(client).unwrap();
+	let client = JsonrpseeClient::with_default_url().expect("Should create client");
+	let mut api =
+		Api::<ac_primitives::AssetRuntimeConfig, _>::new(client).expect("Should create API");
 
 	// Wait for the bootnode to get to session 5
 	wait_for_session_3(&mut api).await;
@@ -90,7 +91,7 @@ async fn wait_for_session_3(api: &mut Api<AssetRuntimeConfig, JsonrpseeClient>) 
 	let mut has_seen = HashSet::new();
 	let mut listener = DKGEventListener::new();
 	loop {
-		let mut subscription = api.subscribe_events().unwrap();
+		let mut subscription = api.subscribe_events().expect("Should subscribe to events");
 		let records = tokio::task::spawn_blocking(move || {
 			let events = subscription.next_events::<dkg_standalone_runtime::RuntimeEvent, H256>();
 			if let Some(events) = events {

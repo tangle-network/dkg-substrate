@@ -1,0 +1,67 @@
+name: integration tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: git
+  RUST_LOG: "dkg=trace"
+
+jobs:
+  # dkg-substrate integration tests
+  local_chain:
+    name: Local Chain Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.9.1
+        with:
+          access_token: ${{ github.token }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Configure sccache
+        run: |
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+
+      - name: Restore Cache
+        if: always()
+        uses: actions/cache/restore@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            target/release
+            target/debug
+          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-harness-stress-tests
+
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: nightly
+
+      - name: Install cargo make
+        run: cargo install --force cargo-make
+
+      - name: Build Release Binary
+        run: cargo make build-test
+
+      - name: Get To Session 3
+        run: cargo make integration-tests
+
+      - name: Save Cache
+        if: ${{ !cancelled() }}
+        uses: actions/cache/save@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            target/release
+            target/debug
+          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-harness-stress-tests
