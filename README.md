@@ -92,13 +92,15 @@ This should start the local testnet, you can view the logs in `/tmp` directory f
 
 The following instructions outline how to run dkg-substrate's base test suite and E2E test suite.
 
-### To run base tests
+### Unit Tests
 
 ```
 cargo test
 ```
 
-### To run the test orchestrator E2E tests (recommended)
+### Stress Tests
+
+When debugging the internal mechanics of the DKG, it is useful to run the stress tests. These tests are designed to run the DKG with a small number of authorities and a small number of participants. This allows you to quickly debug the DKG without having to setup a local chain.
 
 ```
 # Build the dkg-standalone node
@@ -107,6 +109,39 @@ cargo build --release -p dkg-standalone-node --features=integration-tests,testin
 # run the orchestrator, making sure to use the proper config
 cargo run --package dkg-test-orchestrator --release --features=testing -- --config /path/to/orchestrator_config.toml
 ```
+
+### Local Chain Tests (Automatic)
+
+To test the DKG against a local testnet, run:
+
+```
+cargo make integration-tests
+```
+
+### Local Chain Tests (Manual)
+
+If manual control is needed over the nodes (e.g., for debugging and/or shutting down nodes to test fault-tolerance), first build the binary:
+
+```
+cargo make build-test
+```
+
+Then, start the bootnode (Alice):
+
+```
+cargo make alice
+```
+
+Once Alice is running, start the other nodes each in separate terminals/processes:
+
+```
+cargo make bob
+cargo make charlie
+cargo make dave
+cargo make eve
+```
+
+
 
 ### Setting up debugging logs
 
