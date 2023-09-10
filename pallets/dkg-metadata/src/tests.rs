@@ -15,9 +15,10 @@
 use std::vec;
 
 use crate::{
-	mock::*, AggregatedMisbehaviourReports, AuthorityReputations, Config, Error, Event,
-	JailedKeygenAuthorities, NextAuthorities, NextBestAuthorities, NextKeygenThreshold,
-	NextSignatureThreshold,
+	mock::*, AggregatedMisbehaviourReports, AggregatedPublicKeys, Authorities,
+	AuthorityReputations, BestAuthorities, Config, Error, Event, JailedKeygenAuthorities,
+	NextAuthorities, NextBestAuthorities, NextKeygenThreshold, NextSignatureThreshold,
+	INITIAL_REPUTATION, REPUTATION_INCREMENT,
 };
 use codec::Encode;
 use dkg_runtime_primitives::{keccak_256, utils::ecdsa, MisbehaviourType, KEY_TYPE};
@@ -55,6 +56,13 @@ fn mock_misbehaviour_report<T: Config>(
 
 fn mock_pub_key() -> ecdsa::Public {
 	ecdsa_generate(KEY_TYPE, None)
+}
+
+fn mock_signature(pub_key: ecdsa::Public, dkg_key: ecdsa::Public) -> (Vec<u8>, Vec<u8>) {
+	let msg = dkg_key.encode();
+	let hash = keccak_256(&msg);
+	let signature: ecdsa::Signature = ecdsa_sign_prehashed(KEY_TYPE, &pub_key, &hash).unwrap();
+	(msg, signature.encode())
 }
 
 fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
@@ -804,4 +812,66 @@ fn keygen_misbehaviour_reports_does_not_drop_threshold_below_2() {
 			Error::<Test>::NotEnoughAuthoritiesToJail
 		);
 	});
+}
+
+#[test]
+fn reputation_is_set_correctly() {
+	new_test_ext(vec![1, 2, 3, 4, 5]).execute_with(|| {
+		// setup the new threshold so our signature is accepted
+		let keygen_threshold = 5;
+		let signature_threshold = 3;
+		let dkg_key = ecdsa_generate(KEY_TYPE, None);
+		NextKeygenThreshold::<Test>::put(keygen_threshold);
+		NextSignatureThreshold::<Test>::put(signature_threshold);
+		let mut aggregated_public_keys = AggregatedPublicKeys::default();
+		// prep the next authorities
+		let mut next_authorities: BoundedVec<_, _> = Default::default();
+		let mut next_authorities_raw: Vec<_> = Default::default();
+		for _ in 1..=5 {
+			let authority_id = mock_pub_key();
+			let dkg_id = DKGId::from(authority_id);
+			next_authorities_raw.push(authority_id);
+			next_authorities.try_push(dkg_id).unwrap();
+			aggregated_public_keys
+				.keys_and_signatures
+				.push(mock_signature(authority_id, dkg_key));
+		}
+
+		// load them onchain
+		Authorities::<Test>::put(&next_authorities);
+		NextAuthorities::<Test>::put(&next_authorities);
+		let next_best_authorities =
+			DKGMetadata::get_best_authorities(keygen_threshold as usize, &next_authorities);
+		let mut bounded_next_best_authorities: BoundedVec<_, _> = Default::default();
+		for auth in next_best_authorities {
+			bounded_next_best_authorities.try_push(auth).unwrap();
+		}
+		NextBestAuthorities::<Test>::put(&bounded_next_best_authorities);
+		BestAuthorities::<Test>::put(&bounded_next_best_authorities);
+
+		assert_ok!(DKGMetadata::submit_public_key(
+			RuntimeOrigin::none(),
+			aggregated_public_keys.clone()
+		));
+
+		let reputations = AuthorityReputations::<Test>::iter();
+
+		// all authorities should have initial reputation
+		for rep in reputations {
+			assert!(rep.1 == INITIAL_REPUTATION.into());
+		}
+
+		// ---- submit next public key ----
+
+		assert_ok!(DKGMetadata::submit_next_public_key(
+			RuntimeOrigin::none(),
+			aggregated_public_keys
+		));
+		let reputations = AuthorityReputations::<Test>::iter();
+
+		// all authorities should have initial reputation + increment
+		for rep in reputations {
+			assert!(rep.1 == (INITIAL_REPUTATION + REPUTATION_INCREMENT).into());
+		}
+	})
 }
