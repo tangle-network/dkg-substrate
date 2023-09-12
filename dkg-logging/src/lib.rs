@@ -5,6 +5,7 @@ use tracing_subscriber::{
 	EnvFilter,
 };
 
+#[cfg(feature = "full")]
 pub mod debug_logger;
 
 pub fn setup_log() {

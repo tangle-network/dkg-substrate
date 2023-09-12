@@ -58,7 +58,6 @@ where
 				party_i,
 				session_id,
 				stage,
-				crate::DKG_KEYGEN_PROTOCOL_NAME,
 				associated_block,
 				KEYGEN_SSID,
 			) {
@@ -166,7 +165,6 @@ where
 				party_i,
 				session_id,
 				stage,
-				crate::DKG_SIGNING_PROTOCOL_NAME,
 				associated_block_id,
 				ssid,
 			)?;

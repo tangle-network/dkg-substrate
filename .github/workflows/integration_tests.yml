@@ -1,4 +1,4 @@
-name: Stress Tests
+name: integration tests
 
 on:
   push:
@@ -11,8 +11,9 @@ env:
   RUST_LOG: "dkg=trace"
 
 jobs:
-  harness:
-    name: Harness
+  # dkg-substrate integration tests
+  local_chain:
+    name: Local Chain Tests
     runs-on: ubuntu-latest
     steps:
       - name: Cancel Previous Runs
@@ -39,7 +40,7 @@ jobs:
             ~/.cargo/registry
             target/release
             target/debug
-          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-harness-stress-tests
+          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-local-chain-tests
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -49,17 +50,14 @@ jobs:
       - name: Install Protobuf
         run: sudo apt-get install protobuf-compiler
 
-      - name: t2n3 && 1 proposal per session
-        run: cargo run --package dkg-test-orchestrator --features=debug-tracing -- --tmp /tmp --threshold 2 --n 3 --bind 127.0.0.1:7777 --n-tests 10 -p 1
+      - name: Install cargo make
+        run: cargo install --force cargo-make
 
-      - name: t2n3 && 2 proposals per session
-        run: cargo run --package dkg-test-orchestrator --features=debug-tracing -- --tmp /tmp --threshold 2 --n 3 --bind 127.0.0.1:7777 --n-tests 10 -p 2
+      - name: Build Binary
+        run: cargo make build-test
 
-      - name: t3n5 && 1 proposal per session
-        run: cargo run --package dkg-test-orchestrator --features=debug-tracing -- --tmp /tmp --threshold 3 --n 5 --bind 127.0.0.1:7777 --n-tests 10 -p 1
-
-      - name: t3n5 && 2 proposals per session
-        run: cargo run --package dkg-test-orchestrator --features=debug-tracing -- --tmp /tmp --threshold 3 --n 5 --bind 127.0.0.1:7777 --n-tests 10 -p 2
+      - name: Run Tests
+        run: cargo make integration-tests
 
       - name: Save Cache
         if: ${{ !cancelled() }}
@@ -69,4 +67,4 @@ jobs:
             ~/.cargo/registry
             target/release
             target/debug
-          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-harness-stress-tests
+          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-local-chain-tests

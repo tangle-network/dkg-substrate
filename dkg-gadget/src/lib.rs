@@ -142,11 +142,6 @@ where
 		dkg_keystore.clone(),
 	);
 
-	let signing_gossip_protocol = NetworkGossipEngineBuilder::new(
-		DKG_SIGNING_PROTOCOL_NAME.to_string().into(),
-		dkg_keystore.clone(),
-	);
-
 	let logger_prometheus = debug_logger.clone();
 
 	let metrics =
@@ -165,7 +160,7 @@ where
 
 	let latest_header = Arc::new(RwLock::new(None));
 
-	let (keygen_gossip_handler, keygen_gossip_engine) = keygen_gossip_protocol
+	let (gossip_handler, gossip_engine) = keygen_gossip_protocol
 		.build(
 			network.clone(),
 			sync_service.clone(),
@@ -175,27 +170,13 @@ where
 		)
 		.expect("Keygen : Failed to build gossip engine");
 
-	let (signing_gossip_handler, signing_gossip_engine) = signing_gossip_protocol
-		.build(
-			network.clone(),
-			sync_service.clone(),
-			metrics.clone(),
-			latest_header.clone(),
-			debug_logger.clone(),
-		)
-		.expect("Signing : Failed to build gossip engine");
-
 	// enable the gossip
-	keygen_gossip_engine.set_gossip_enabled(true);
-	signing_gossip_engine.set_gossip_enabled(true);
+	gossip_engine.set_gossip_enabled(true);
 
 	// keygen_gossip_engine.set_processing_already_seen_messages_enabled(false);
 	// signing_gossip_engine.set_processing_already_seen_messages_enabled(false);
 
-	let keygen_handle =
-		crate::utils::ExplicitPanicFuture::new(tokio::spawn(keygen_gossip_handler.run()));
-	let signing_handle =
-		crate::utils::ExplicitPanicFuture::new(tokio::spawn(signing_gossip_handler.run()));
+	let gossip_handle = crate::utils::ExplicitPanicFuture::new(tokio::spawn(gossip_handler.run()));
 
 	// In memory backend, not used for now
 	// let db_backend = Arc::new(db::DKGInMemoryDb::new());
@@ -211,8 +192,7 @@ where
 		client,
 		backend,
 		key_store: dkg_keystore,
-		keygen_gossip_engine,
-		signing_gossip_engine,
+		gossip_engine,
 		db_backend,
 		metrics,
 		local_keystore,
@@ -225,8 +205,7 @@ where
 	let worker = worker::DKGWorker::<_, _, _, _>::new(worker_params, debug_logger);
 
 	worker.run().await;
-	keygen_handle.abort();
-	signing_handle.abort();
+	gossip_handle.abort();
 }
 
 pub mod deadlock_detection {
