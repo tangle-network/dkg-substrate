@@ -21,6 +21,7 @@ use wt_frost::WTFrostDKG;
 
 pub mod mp_ecdsa;
 pub mod wt_frost;
+pub mod wt_frost_wsts;
 
 /// Setup parameters for the Keygen protocol
 pub enum KeygenProtocolSetupParameters<B: Block> {
@@ -97,7 +98,10 @@ where
 {
 	/// Loads the default DKG modules internally to be available at runtime
 	pub fn initialize(&self, dkg_worker: DKGWorker<B, BE, C, GE>) {
-		*self.dkgs.write() = vec![Arc::new(MpEcdsaDKG { dkg_worker }), Arc::new(WTFrostDKG {})]
+		*self.dkgs.write() = vec![
+			Arc::new(MpEcdsaDKG { dkg_worker: dkg_worker.clone() }),
+			Arc::new(WTFrostDKG { dkg_worker }),
+		]
 	}
 
 	/// Given a set of parameters, returns the keygen protocol initializer which can handle the
