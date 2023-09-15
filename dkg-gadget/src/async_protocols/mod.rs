@@ -14,11 +14,11 @@
 
 pub mod blockchain_interface;
 pub mod incoming;
-pub mod keygen;
 pub mod remote;
-pub mod sign;
 pub mod state_machine;
 pub mod state_machine_wrapper;
+pub mod ecdsa;
+pub mod frost;
 use sp_runtime::traits::Get;
 #[cfg(test)]
 pub mod test_utils;

@@ -21,7 +21,6 @@ use wt_frost::WTFrostDKG;
 
 pub mod mp_ecdsa;
 pub mod wt_frost;
-pub mod wt_frost_wsts;
 
 /// Setup parameters for the Keygen protocol
 pub enum KeygenProtocolSetupParameters<B: Block> {
