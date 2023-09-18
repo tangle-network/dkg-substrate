@@ -34,7 +34,16 @@ pub enum KeygenProtocolSetupParameters<B: Block> {
 		stage: ProtoStageType,
 		keygen_protocol_hash: [u8; 32],
 	},
-	WTFrost {},
+	WTFrost {
+		authority_id: AuthorityId,
+		best_authorities: Vec<(KeygenPartyId, Public)>,
+		authority_public_key: Public,
+		keygen_protocol_hash: [u8; 32],
+		threshold: u32,
+		session_id: SessionId,
+		associated_block: NumberFor<B>,
+		stage: ProtoStageType
+	},
 }
 
 /// Setup parameters for the Signing protocol

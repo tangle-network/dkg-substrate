@@ -361,8 +361,6 @@ where
 				db: self.db.clone(),
 				gossip_engine: self.gossip_engine.clone(),
 				aggregated_public_keys: self.aggregated_public_keys.clone(),
-				best_authorities: best_authorities.clone(),
-				authority_public_key: authority_public_key.clone(),
 				current_validator_set: self.current_validator_set.clone(),
 				local_keystore: self.local_keystore.clone(),
 				vote_results: Arc::new(Default::default()),

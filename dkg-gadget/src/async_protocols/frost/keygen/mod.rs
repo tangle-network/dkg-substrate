@@ -13,7 +13,9 @@ use crate::dkg_modules::wt_frost::{FrostMessage, NetInterface};
 use crate::gossip_engine::GossipEngineIface;
 use crate::worker::DKGWorker;
 
-pub struct FrostKeygen<B, BE, C, GE, BI>
+pub mod proto;
+
+pub struct FrostKeygenNetworkWrapper<B, BE, C, GE, BI>
 	where
 		B: Block,
 		BE: Backend<B>,
@@ -24,29 +26,25 @@ pub struct FrostKeygen<B, BE, C, GE, BI>
 	pub message_receiver: UnboundedReceiver<SignedDKGMessage<AuthorityId>>,
 	pub authority_id: AuthorityId,
 	pub keygen_protocol_hash: [u8; 32],
-	pub received_messages: HashSet<[u8;32]>
+	pub received_messages: HashSet<[u8;32]>,
 	pub engine: BI
 }
 
-impl<B, BE, C, GE, BI: BlockchainInterface> FrostKeygen<B, BE, C, GE, BI> {
-	pub fn new(dkg_worker: DKGWorker<B, BE, C, GE>, engine: BI, remote: AsyncProtocolRemote<C>, authority_id: AuthorityId, retry_id: usize) -> Self {
+impl<B, BE, C, GE, BI: BlockchainInterface> FrostKeygenNetworkWrapper<B, BE, C, GE, BI> {
+	pub fn new(dkg_worker: DKGWorker<B, BE, C, GE>, engine: BI, remote: AsyncProtocolRemote<C>, authority_id: AuthorityId, keygen_protocol_hash: [u8; 32]) -> Self {
 		let message_receiver = remote
 			.rx_keygen_signing
 			.lock()
 			.take()
 			.expect("rx_keygen_signing already taken");
 
-		let mut data = retry_id.to_be_bytes().to_vec();
-		data.extend_from_slice(&remote.session_id.to_be_bytes());
-
-		let keygen_protocol_hash = sha2_256(&data);
 		let received_messages = HashSet::new();
 
 		Self { dkg_worker, engine, remote, message_receiver, authority_id, keygen_protocol_hash, received_messages }
 	}
 }
 
-impl<B, BE, C, GE, BI: BlockchainInterface> NetInterface for FrostKeygen<B, BE, C, GE, BI>
+impl<B, BE, C, GE, BI: BlockchainInterface> NetInterface for FrostKeygenNetworkWrapper<B, BE, C, GE, BI>
 	where
 		B: Block,
 		BE: Backend<B>,

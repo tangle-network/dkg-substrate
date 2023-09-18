@@ -62,10 +62,7 @@ where
 				KEYGEN_SSID,
 			) {
 				Ok(async_proto_params) => {
-					let err_handler_tx = self.dkg_worker.error_handler_channel.tx.clone();
-
 					let remote = async_proto_params.handle.clone();
-					let keygen_manager = self.dkg_worker.keygen_manager.clone();
 					let status = match stage {
 						ProtoStageType::KeygenGenesis => KeygenRound::Genesis,
 						ProtoStageType::KeygenStandard => KeygenRound::Next,
@@ -81,43 +78,8 @@ where
 						keygen_protocol_hash,
 					) {
 						Ok(meta_handler) => {
-							let logger = self.dkg_worker.logger.clone();
-							let signing_manager = self.dkg_worker.signing_manager.clone();
-							signing_manager.keygen_lock();
-							let task = async move {
-								match meta_handler.await {
-									Ok(_) => {
-										keygen_manager.set_state(KeygenState::KeygenCompleted {
-											session_completed: session_id,
-										});
-										let _ = keygen_manager
-											.finished_count
-											.fetch_add(1, Ordering::SeqCst);
-										signing_manager.keygen_unlock();
-										logger.info(
-											"The keygen meta handler has executed successfully"
-												.to_string(),
-										);
-
-										Ok(())
-									},
-
-									Err(err) => {
-										logger.error(format!(
-											"Error executing meta handler {:?}",
-											&err
-										));
-										keygen_manager
-											.set_state(KeygenState::Failed { session_id });
-										signing_manager.keygen_unlock();
-										let _ = err_handler_tx.send(err.clone());
-										Err(err)
-									},
-								}
-							};
-
 							self.dkg_worker.logger.debug(format!("Created Keygen Protocol task for session {session_id} with status {status:?}"));
-							return Some((remote, Box::pin(task)))
+							return Some((remote, Box::pin(meta_handler)))
 						},
 
 						Err(err) => {

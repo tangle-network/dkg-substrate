@@ -475,6 +475,47 @@ where
 				self.work_manager.force_shutdown_all();
 			}
 
+			// Now, map the task to properly handle cleanup
+			let logger = dkg_worker.logger.clone();
+			let signing_manager = dkg_worker.signing_manager.clone();
+			let keygen_manager = dkg_worker.keygen_manager.clone();
+			let err_handler_tx = dkg_worker.error_handler_channel.tx.clone();
+
+			// Prevent any signing tasks from running while the keygen is running
+			signing_manager.keygen_lock();
+
+			let task = async move {
+				match task.await {
+					Ok(_) => {
+						keygen_manager.set_state(KeygenState::KeygenCompleted {
+							session_completed: session_id,
+						});
+						let _ = keygen_manager
+							.finished_count
+							.fetch_add(1, Ordering::SeqCst);
+						signing_manager.keygen_unlock();
+						logger.info(
+							"The keygen meta handler has executed successfully"
+								.to_string(),
+						);
+
+						Ok(())
+					},
+
+					Err(err) => {
+						logger.error(format!(
+							"Error executing meta handler {:?}",
+							&err
+						));
+						keygen_manager
+							.set_state(KeygenState::Failed { session_id });
+						signing_manager.keygen_unlock();
+						let _ = err_handler_tx.send(err.clone());
+						Err(err)
+					},
+				}
+			};
+
 			if let Err(err) = self.push_task(handle, task) {
 				dkg_worker.logger.error(format!(
 					"🕸️  PARTY {party_i} | SPAWNING KEYGEN SESSION {session_id} | ERROR: {err}"

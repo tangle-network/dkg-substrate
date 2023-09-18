@@ -81,7 +81,6 @@ pub trait BlockchainInterface: Send + Sync + Unpin {
 		key: LocalKey<Secp256k1>,
 		session_id: SessionId,
 	) -> Result<(), DKGError>;
-	fn get_authority_set(&self) -> Vec<(KeygenPartyId, Public)>;
 	fn get_gossip_engine(&self) -> Option<&Self::GossipEngine>;
 	/// Returns the present time
 	fn now(&self) -> Self::Clock;
@@ -106,8 +105,6 @@ pub struct DKGProtocolEngine<
 	pub db: Arc<dyn crate::db::DKGDbBackend>,
 	pub gossip_engine: Arc<GE>,
 	pub aggregated_public_keys: Arc<RwLock<HashMap<SessionId, AggregatedPublicKeys>>>,
-	pub best_authorities: Arc<Vec<(KeygenPartyId, Public)>>,
-	pub authority_public_key: Arc<Public>,
 	pub vote_results: Arc<
 		RwLock<
 			HashMap<
@@ -388,10 +385,6 @@ impl<B, BE, C, GE> BlockchainInterface
 	) -> Result<(), DKGError> {
 		self.logger.debug(format!("Storing local key for session {session_id:?}"));
 		self.db.store_local_key(session_id, key)
-	}
-
-	fn get_authority_set(&self) -> Vec<(KeygenPartyId, Public)> {
-		(*self.best_authorities).clone()
 	}
 
 	fn get_gossip_engine(&self) -> Option<&Self::GossipEngine> {

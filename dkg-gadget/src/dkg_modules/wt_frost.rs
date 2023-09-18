@@ -1,10 +1,12 @@
-use dkg_primitives::types::DKGError;
+use dkg_primitives::types::{DKGError, SSID};
 use itertools::Itertools;
 use rand::{CryptoRng, RngCore};
 use std::{collections::HashMap, fmt::Debug};
+use std::sync::Arc;
 use async_trait::async_trait;
 use sc_client_api::Backend;
 use serde::{Deserialize, Serialize};
+use sp_arithmetic::traits::SaturatedConversion;
 use sp_runtime::traits::Block;
 use wsts::{
 	common::{PolyCommitment, PublicNonce, Signature, SignatureShare},
@@ -12,11 +14,13 @@ use wsts::{
 	v2::SignatureAggregator,
 	Scalar,
 };
+use crate::async_protocols::blockchain_interface::DKGProtocolEngine;
+use crate::async_protocols::frost::keygen::FrostKeygenNetworkWrapper;
 use crate::async_protocols::remote::AsyncProtocolRemote;
 use crate::Client;
 use crate::dkg_modules::{DKG, KeygenProtocolSetupParameters, ProtocolInitReturn, SigningProtocolSetupParameters};
 use crate::gossip_engine::GossipEngineIface;
-use crate::worker::DKGWorker;
+use crate::worker::{DKGWorker, HasLatestHeader, ProtoStageType};
 
 /// DKG module for Weighted Threshold Frost
 pub struct WTFrostDKG<B, BE, C, GE>
@@ -41,11 +45,57 @@ impl<B, BE, C, GE> DKG<B> for WTFrostDKG<B, BE, C, GE>
 		&self,
 		params: KeygenProtocolSetupParameters<B>,
 	) -> Option<ProtocolInitReturn<B>> {
-		if let KeygenProtocolSetupParameters::WTFrost {} = params {
-			let remote = AsyncProtocolRemote::new();
-			let task = Box::pin(async move {
+		if let KeygenProtocolSetupParameters::WTFrost {
+			best_authorities,
+			authority_id,
+			authority_public_key,
+			keygen_protocol_hash,
+			threshold,
+			session_id,
+			associated_block,
+			stage
+		} = params {
+			// We must construct a remote and a task to ensure compatibility with the work manager
+			// and future message delivery to the service
+			let n = best_authorities.len() as u32;
+			// For now, assume each party member owns n keys
+			let k = n;
+			// The party id for frost must be in [0, n). Thus, we just find out index in the best authorities
+			const KEYGEN_SSID: SSID = 0;
+			let party_id = best_authorities
+				.iter()
+				.find_position(|r| &r.1 == &authority_public_key)
+				.map(|r| r.0 as u32)
+				.expect("Authority ID not found in best authorities");
+			let at = self.dkg_worker.get_latest_block_number();
+			let associated_block_id = associated_block.saturated_into();
+			let authority_mapping = Default::default(); // TODO
 
+			// Setup the remote to allow communication between the async protocol and the DKG worker
+			let remote = AsyncProtocolRemote::new(at, session_id, self.dkg_worker.logger.clone(), associated_block_id, KEYGEN_SSID, stage, authority_mapping);
+
+			// Setup the engine to allow communication between the async protocol and the blockchain
+			let bc_iface = Arc::new(DKGProtocolEngine {
+				backend: self.dkg_worker.backend.clone(),
+				latest_header: self.dkg_worker.latest_header.clone(),
+				client: self.dkg_worker.client.clone(),
+				keystore: self.dkg_worker.key_store.clone(),
+				db: self.dkg_worker.db.clone(),
+				gossip_engine: self.dkg_worker.gossip_engine.clone(),
+				aggregated_public_keys: self.dkg_worker.aggregated_public_keys.clone(),
+				current_validator_set: self.dkg_worker.current_validator_set.clone(),
+				local_keystore: self.dkg_worker.local_keystore.clone(),
+				vote_results: Arc::new(Default::default()),
+				is_genesis: stage == ProtoStageType::KeygenGenesis,
+				metrics: self.dkg_worker.metrics.clone(),
+				test_bundle: self.dkg_worker.test_bundle.clone(),
+				logger: self.dkg_worker.logger.clone(),
+				_pd: Default::default(),
 			});
+
+			let network = FrostKeygenNetworkWrapper::new(self.dkg_worker.clone(), bc_iface.clone(), remote.clone(), authority_id, keygen_protocol_hash);
+
+			let task = crate::async_protocols::frost::keygen::proto::protocol(n, party_id, k, threshold, network, bc_iface, session_id);
 
 			Some((remote, task))
 		} else {
@@ -144,12 +194,13 @@ pub async fn run_dkg<RNG: RngCore + CryptoRng, Net: NetInterface>(
 	Ok(polys)
 }
 
+/// `threshold`: Should be the number of participants in this round, since we stop looking for messages
+/// after finding the first `t` messages
 pub async fn run_signing<RNG: RngCore + CryptoRng, Net: NetInterface>(
 	signer: &mut v2::Party,
 	rng: &mut RNG,
 	msg: &[u8],
 	net: &mut Net,
-	n_signers: usize,
 	num_keys: u32,
 	threshold: u32,
 	public_key: Vec<PolyCommitment>,
@@ -171,7 +222,7 @@ pub async fn run_signing<RNG: RngCore + CryptoRng, Net: NetInterface>(
 	party_key_ids.insert(party_id, key_ids);
 	party_nonces.insert(party_id, nonce);
 
-	while party_nonces.len() < n_signers {
+	while party_nonces.len() < threshold as usize {
 		match net.next_message().await {
 			Ok(Some(FrostMessage::Sign { party_id: party_id_recv, key_ids, nonce })) => {
 				party_key_ids.insert(party_id_recv, key_ids);
@@ -187,7 +238,7 @@ pub async fn run_signing<RNG: RngCore + CryptoRng, Net: NetInterface>(
 	}
 
 	// Sort the vecs
-	let party_ids = (0..n_signers).into_iter().map(|r| r as u32).collect_vec();
+	let party_ids = (0..threshold).into_iter().collect_vec();
 	let party_key_ids = party_key_ids
 		.into_iter()
 		.sorted_by(|a, b| a.0.cmp(&b.0))
@@ -211,7 +262,7 @@ pub async fn run_signing<RNG: RngCore + CryptoRng, Net: NetInterface>(
 	signature_shares.insert(party_id, signature_share.clone());
 
 	// Receive n_signers number of shares
-	while signature_shares.len() < n_signers {
+	while signature_shares.len() < threshold as usize {
 		match net.next_message().await {
 			Ok(Some(FrostMessage::SignFinal { party_id, signature_share })) => {
 				signature_shares.insert(party_id, signature_share);
@@ -273,6 +324,22 @@ pub fn generate_party_key_ids(n: u32, k: u32) -> Vec<Vec<u32>> {
 	}
 
 	result
+}
+
+pub fn validate_parameters(n: u32, k: u32, t: u32) -> Result<(), DKGError> {
+	if k & n != 0 {
+		return Err(DKGError::GenericError { reason: "K % N != 0".to_string() })
+	}
+
+	if k == 0 {
+		return Err(DKGError::GenericError { reason: "K == 0".to_string() })
+	}
+
+	if n <= t {
+		return Err(DKGError::GenericError { reason: "N <= T".to_string() })
+	}
+
+	Ok(())
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -403,7 +470,7 @@ mod tests {
 			signers.push(Box::pin(async move {
 				let mut rng = rand::thread_rng();
 				crate::dkg_modules::wt_frost::run_signing(
-					party, &mut rng, &*msg, network, T as usize, K, T, public_key,
+					party, &mut rng, &*msg, network, K, T, public_key,
 				)
 				.await
 			}));
