@@ -490,25 +490,17 @@ where
 						keygen_manager.set_state(KeygenState::KeygenCompleted {
 							session_completed: session_id,
 						});
-						let _ = keygen_manager
-							.finished_count
-							.fetch_add(1, Ordering::SeqCst);
+						let _ = keygen_manager.finished_count.fetch_add(1, Ordering::SeqCst);
 						signing_manager.keygen_unlock();
-						logger.info(
-							"The keygen meta handler has executed successfully"
-								.to_string(),
-						);
+						logger
+							.info("The keygen meta handler has executed successfully".to_string());
 
 						Ok(())
 					},
 
 					Err(err) => {
-						logger.error(format!(
-							"Error executing meta handler {:?}",
-							&err
-						));
-						keygen_manager
-							.set_state(KeygenState::Failed { session_id });
+						logger.error(format!("Error executing meta handler {:?}", &err));
+						keygen_manager.set_state(KeygenState::Failed { session_id });
 						signing_manager.keygen_unlock();
 						let _ = err_handler_tx.send(err.clone());
 						Err(err)

@@ -40,6 +40,10 @@ use parking_lot::RwLock;
 use sc_client_api::Backend;
 use sc_keystore::LocalKeystore;
 
+use crate::{
+	async_protocols::types::{LocalKeyType, VoteResult},
+	db::DKGDbBackend,
+};
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use sp_runtime::traits::{Block, Get, NumberFor};
 use std::{collections::HashMap, fmt::Debug, marker::PhantomData, sync::Arc};
@@ -62,26 +66,11 @@ pub trait BlockchainInterface: Send + Sync + Unpin {
 		message: SignedDKGMessage<Public>,
 	) -> Result<DKGMessage<Public>, DKGError>;
 	fn sign_and_send_msg(&self, unsigned_msg: DKGMessage<Public>) -> Result<(), DKGError>;
-	fn process_vote_result(
-		&self,
-		signature: SignatureRecid,
-		unsigned_proposal_batch: StoredUnsignedProposalBatch<
-			Self::BatchId,
-			Self::MaxProposalLength,
-			Self::MaxProposalsInBatch,
-			Self::Clock,
-		>,
-		session_id: SessionId,
-		batch_key: BatchKey,
-		message: BigInt,
-	) -> Result<(), DKGError>;
+	fn process_vote_result(&self, result: VoteResult<Self>) -> Result<(), DKGError>;
 	fn gossip_public_key(&self, key: PublicKeyMessage) -> Result<(), DKGError>;
-	fn store_public_key(
-		&self,
-		key: LocalKey<Secp256k1>,
-		session_id: SessionId,
-	) -> Result<(), DKGError>;
+	fn store_public_key(&self, key: LocalKeyType, session_id: SessionId) -> Result<(), DKGError>;
 	fn get_gossip_engine(&self) -> Option<&Self::GossipEngine>;
+	fn get_backend_db(&self) -> Option<&Arc<dyn DKGDbBackend>>;
 	/// Returns the present time
 	fn now(&self) -> Self::Clock;
 }
@@ -272,93 +261,106 @@ impl<B, BE, C, GE> BlockchainInterface
 		Ok(())
 	}
 
-	fn process_vote_result(
-		&self,
-		signature: SignatureRecid,
-		unsigned_proposal_batch: StoredUnsignedProposalBatch<
-			Self::BatchId,
-			Self::MaxProposalLength,
-			Self::MaxProposalsInBatch,
-			Self::Clock,
-		>,
-		session_id: SessionId,
-		batch_key: BatchKey,
-		_message: BigInt,
-	) -> Result<(), DKGError> {
-		// Call worker.rs: handle_finished_round -> Proposal
-		// aggregate Proposal into Vec<Proposal>
-		self.logger.info(format!(
-			"PROCESS VOTE RESULT : session_id {session_id:?}, signature : {signature:?}"
-		));
-
-		let signature = convert_signature(&signature).ok_or_else(|| DKGError::CriticalError {
-			reason: "Unable to serialize signature".to_string(),
-		})?;
-
-		let mut signed_proposals = vec![];
-
-		// convert all unsigned proposals to signed
-		for unsigned_proposal in unsigned_proposal_batch.proposals.iter() {
-			signed_proposals.push(Proposal::Signed {
-				kind: unsigned_proposal.proposal.kind(),
-				data: unsigned_proposal
-					.data()
-					.clone()
-					.try_into()
-					.expect("should not happen since its a valid proposal"),
-				signature: signature
-					.encode()
-					.try_into()
-					.expect("Signature exceeds runtime bounds!"),
-			});
-		}
-
-		let signed_proposal_batch = SignedProposalBatch {
-			batch_id: unsigned_proposal_batch.batch_id,
-			proposals: signed_proposals.try_into().expect("Proposals exceeds runtime bounds!"),
-			signature: signature.encode().try_into().expect("Signature exceeds runtime bounds!"),
-		};
-
-		let mut lock = self.vote_results.write();
-		let proposals_for_this_batch = lock.entry(batch_key).or_default();
-
-		proposals_for_this_batch.push(signed_proposal_batch);
-
-		if proposals_for_this_batch.len() == batch_key.len {
-			self.logger.info(format!("All proposals have resolved for batch {batch_key:?}"));
-			let proposals = lock.remove(&batch_key).expect("Cannot get lock on vote_results"); // safe unwrap since lock is held
-			std::mem::drop(lock);
-
-			if let Some(metrics) = self.metrics.as_ref() {
-				metrics.dkg_signed_proposal_counter.inc_by(proposals.len() as u64);
-			}
-
-			save_signed_proposals_in_storage::<
-				B,
-				C,
-				BE,
-				MaxProposalLength,
-				MaxAuthorities,
-				BatchId,
-				MaxProposalsInBatch,
-				MaxSignatureLength,
-			>(
-				&self.get_authority_public_key(),
-				&self.current_validator_set,
-				&self.latest_header,
-				&self.backend,
-				proposals,
-				&self.logger,
-			);
-			// send None to signify this was a signing result
-			self.send_result_to_test_client(Ok(()), None);
-		} else {
-			self.logger.info(format!(
-				"{}/{} proposals have resolved for batch {:?}",
-				proposals_for_this_batch.len(),
-				batch_key.len,
+	fn process_vote_result(&self, result: VoteResult<Self>) -> Result<(), DKGError> {
+		match result {
+			VoteResult::ECDSA {
+				signature,
+				unsigned_proposal_batch,
+				session_id,
 				batch_key,
-			));
+				message,
+			} => {
+				// Call worker.rs: handle_finished_round -> Proposal
+				// aggregate Proposal into Vec<Proposal>
+				self.logger.info(format!(
+					"PROCESS VOTE RESULT : session_id {session_id:?}, signature : {signature:?}"
+				));
+
+				let signature = convert_signature(&signature).ok_or_else(|| {
+					DKGError::CriticalError { reason: "Unable to serialize signature".to_string() }
+				})?;
+
+				let mut signed_proposals = vec![];
+
+				// convert all unsigned proposals to signed
+				for unsigned_proposal in unsigned_proposal_batch.proposals.iter() {
+					signed_proposals.push(Proposal::Signed {
+						kind: unsigned_proposal.proposal.kind(),
+						data: unsigned_proposal
+							.data()
+							.clone()
+							.try_into()
+							.expect("should not happen since its a valid proposal"),
+						signature: signature
+							.encode()
+							.try_into()
+							.expect("Signature exceeds runtime bounds!"),
+					});
+				}
+
+				let signed_proposal_batch = SignedProposalBatch {
+					batch_id: unsigned_proposal_batch.batch_id,
+					proposals: signed_proposals
+						.try_into()
+						.expect("Proposals exceeds runtime bounds!"),
+					signature: signature
+						.encode()
+						.try_into()
+						.expect("Signature exceeds runtime bounds!"),
+				};
+
+				let mut lock = self.vote_results.write();
+				let proposals_for_this_batch = lock.entry(batch_key).or_default();
+
+				proposals_for_this_batch.push(signed_proposal_batch);
+
+				if proposals_for_this_batch.len() == batch_key.len {
+					self.logger
+						.info(format!("All proposals have resolved for batch {batch_key:?}"));
+					let proposals =
+						lock.remove(&batch_key).expect("Cannot get lock on vote_results"); // safe unwrap since lock is held
+					std::mem::drop(lock);
+
+					if let Some(metrics) = self.metrics.as_ref() {
+						metrics.dkg_signed_proposal_counter.inc_by(proposals.len() as u64);
+					}
+
+					save_signed_proposals_in_storage::<
+						B,
+						C,
+						BE,
+						MaxProposalLength,
+						MaxAuthorities,
+						_,
+					>(
+						&self.get_authority_public_key(),
+						&self.current_validator_set,
+						&self.latest_header,
+						&self.backend,
+						proposals,
+						&self.logger,
+					);
+					// send None to signify this was a signing result
+					self.send_result_to_test_client(Ok(()), None);
+				} else {
+					self.logger.info(format!(
+						"{}/{} proposals have resolved for batch {:?}",
+						proposals_for_this_batch.len(),
+						batch_key.len,
+						batch_key,
+					));
+				}
+			},
+
+			VoteResult::FROST {
+				signature,
+				unsigned_proposal_batch,
+				session_id,
+				batch_key,
+				message,
+			} => {
+				unimplemented!("FROST is not implemented yet");
+			},
 		}
 
 		Ok(())
@@ -378,17 +380,17 @@ impl<B, BE, C, GE> BlockchainInterface
 		Ok(())
 	}
 
-	fn store_public_key(
-		&self,
-		key: LocalKey<Secp256k1>,
-		session_id: SessionId,
-	) -> Result<(), DKGError> {
+	fn store_public_key(&self, key: LocalKeyType, session_id: SessionId) -> Result<(), DKGError> {
 		self.logger.debug(format!("Storing local key for session {session_id:?}"));
 		self.db.store_local_key(session_id, key)
 	}
 
 	fn get_gossip_engine(&self) -> Option<&Self::GossipEngine> {
 		Some(&self.gossip_engine)
+	}
+
+	fn get_backend_db(&self) -> Option<&Arc<dyn DKGDbBackend>> {
+		Some(&self.db)
 	}
 
 	fn now(&self) -> Self::Clock {

@@ -132,43 +132,14 @@ where
 			)?;
 
 			let handle = async_proto_params.handle.clone();
-
-			let err_handler_tx = self.dkg_worker.error_handler_channel.tx.clone();
 			let meta_handler = GenericAsyncHandler::setup_signing(
 				async_proto_params,
 				threshold,
 				unsigned_proposal_batch,
 				signing_set,
 			)?;
-			let logger = self.dkg_worker.logger.clone();
-			let signing_manager = self.dkg_worker.signing_manager.clone();
-			let task = async move {
-				match meta_handler.await {
-					Ok(_) => {
-						logger.info("The meta handler has executed successfully");
-						signing_manager
-							.update_local_signing_set_state(SigningResult::Success {
-								unsigned_proposal_hash,
-							})
-							.await;
-						Ok(())
-					},
 
-					Err(err) => {
-						logger.error(format!("Error executing meta handler {:?}", &err));
-						signing_manager
-							.update_local_signing_set_state(SigningResult::Failure {
-								unsigned_proposal_hash,
-								ssid,
-							})
-							.await;
-						let _ = err_handler_tx.send(err.clone());
-						Err(err)
-					},
-				}
-			};
-
-			Ok((handle, Box::pin(task)))
+			Ok((handle, Box::pin(meta_handler)))
 		} else {
 			unreachable!("Should not happen (signing)")
 		}

@@ -42,7 +42,7 @@ pub enum KeygenProtocolSetupParameters<B: Block> {
 		threshold: u32,
 		session_id: SessionId,
 		associated_block: NumberFor<B>,
-		stage: ProtoStageType
+		stage: ProtoStageType,
 	},
 }
 
@@ -66,7 +66,21 @@ pub enum SigningProtocolSetupParameters<B: Block> {
 		ssid: SSID,
 		unsigned_proposal_hash: [u8; 32],
 	},
-	WTFrost {},
+	WTFrost {
+		authority_id: AuthorityId,
+		unsigned_proposal_hash: [u8; 32],
+		unsigned_proposal_batch: StoredUnsignedProposalBatch<
+			BatchId,
+			MaxProposalLength,
+			MaxProposalsInBatch,
+			NumberFor<B>,
+		>,
+		threshold: u32,
+		session_id: SessionId,
+		associated_block: NumberFor<B>,
+		stage: ProtoStageType,
+		ssid: SSID,
+	},
 }
 
 /// A type which is used directly by the Job Manager to initialize and manage the DKG protocol

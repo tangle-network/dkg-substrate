@@ -334,6 +334,36 @@ where
 
 				match signing_protocol.initialize_signing_protocol(params).await {
 					Ok((handle, task)) => {
+						// Map the task to be compatible with this signing manager
+						let err_handler_tx = dkg_worker.error_handler_channel.tx.clone();
+						let logger = dkg_worker.logger.clone();
+						let signing_manager = dkg_worker.signing_manager.clone();
+						let task = async move {
+							match task.await {
+								Ok(_) => {
+									logger.info("The meta handler has executed successfully");
+									signing_manager
+										.update_local_signing_set_state(SigningResult::Success {
+											unsigned_proposal_hash,
+										})
+										.await;
+									Ok(())
+								},
+
+								Err(err) => {
+									logger
+										.error(format!("Error executing meta handler {:?}", &err));
+									signing_manager
+										.update_local_signing_set_state(SigningResult::Failure {
+											unsigned_proposal_hash,
+											ssid,
+										})
+										.await;
+									let _ = err_handler_tx.send(err.clone());
+									Err(err)
+								},
+							}
+						};
 						// Send task to the work manager. Force start if the type chain ID
 						// is None, implying this is a proposal needed for rotating sessions
 						// and thus a priority

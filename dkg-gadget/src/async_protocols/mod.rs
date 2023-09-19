@@ -13,15 +13,16 @@
 // limitations under the License.
 
 pub mod blockchain_interface;
+pub mod ecdsa;
+pub mod frost;
 pub mod incoming;
 pub mod remote;
 pub mod state_machine;
 pub mod state_machine_wrapper;
-pub mod ecdsa;
-pub mod frost;
 use sp_runtime::traits::Get;
 #[cfg(test)]
 pub mod test_utils;
+pub mod types;
 
 use curv::elliptic::curves::Secp256k1;
 use dkg_primitives::{

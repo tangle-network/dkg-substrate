@@ -1,5 +1,8 @@
 #![allow(clippy::unwrap_used)] // allow unwraps in tests
-use crate::async_protocols::{blockchain_interface::BlockchainInterface, BatchKey};
+use crate::{
+	async_protocols::{blockchain_interface::BlockchainInterface, types::LocalKeyType, BatchKey},
+	db::DKGDbBackend,
+};
 use codec::Encode;
 use curv::{elliptic::curves::Secp256k1, BigInt};
 use dkg_primitives::{
@@ -42,7 +45,7 @@ pub struct TestDummyIface {
 	pub authority_public_key: Arc<Public>,
 	// key is party_index, hash of data. Needed especially for local unit tests
 	pub vote_results: VoteResults,
-	pub keygen_key: Arc<Mutex<Option<LocalKey<Secp256k1>>>>,
+	pub keygen_key: Arc<Mutex<Option<LocalKeyType>>>,
 }
 
 #[async_trait::async_trait]
@@ -130,16 +133,16 @@ impl BlockchainInterface for TestDummyIface {
 		Ok(())
 	}
 
-	fn store_public_key(&self, key: LocalKey<Secp256k1>, _: SessionId) -> Result<(), DKGError> {
+	fn store_public_key(&self, key: LocalKeyType, _: SessionId) -> Result<(), DKGError> {
 		*self.keygen_key.lock() = Some(key);
 		Ok(())
 	}
 
-	fn get_authority_set(&self) -> Vec<(KeygenPartyId, Public)> {
-		(*self.best_authorities).clone()
+	fn get_gossip_engine(&self) -> Option<&Self::GossipEngine> {
+		None
 	}
 
-	fn get_gossip_engine(&self) -> Option<&Self::GossipEngine> {
+	fn get_backend_db(&self) -> Option<&Arc<dyn DKGDbBackend>> {
 		None
 	}
 

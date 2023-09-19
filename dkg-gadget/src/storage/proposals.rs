@@ -33,17 +33,13 @@ pub(crate) fn save_signed_proposals_in_storage<
 	BE,
 	MaxProposalLength,
 	MaxAuthorities,
-	BatchId,
-	MaxProposalsInBatch,
-	MaxSignatureLength,
+	SignedProposal,
 >(
 	authority_public_key: &Public,
 	current_validator_set: &Arc<RwLock<AuthoritySet<Public, MaxAuthorities>>>,
 	latest_header: &Arc<RwLock<Option<B::Header>>>,
 	backend: &Arc<BE>,
-	signed_proposals: Vec<
-		SignedProposalBatch<BatchId, MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength>,
-	>,
+	signed_proposals: Vec<SignedProposal>,
 	logger: &DebugLogger,
 ) where
 	B: Block,
@@ -52,11 +48,7 @@ pub(crate) fn save_signed_proposals_in_storage<
 	MaxProposalLength:
 		Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug + std::cmp::PartialEq,
 	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
-	BatchId: Clone + Send + Sync + std::fmt::Debug + 'static + codec::Encode + codec::Decode,
-	MaxProposalsInBatch:
-		Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + codec::Encode + codec::Decode,
-	MaxSignatureLength:
-		Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + codec::Encode + codec::Decode,
+	SignedProposal: Encode,
 	C::Api: DKGApi<
 		B,
 		AuthorityId,
@@ -86,11 +78,6 @@ pub(crate) fn save_signed_proposals_in_storage<
 	if latest_header.is_none() {
 		return
 	}
-
-	let _current_block_number = {
-		let header = latest_header.as_ref().expect("Should not happen, checked above");
-		header.number()
-	};
 
 	if let Some(mut offchain) = backend.offchain_storage() {
 		let old_val = offchain.get(STORAGE_PREFIX, OFFCHAIN_SIGNED_PROPOSALS);

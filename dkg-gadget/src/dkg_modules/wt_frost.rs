@@ -1,45 +1,50 @@
+use crate::{
+	async_protocols::{
+		blockchain_interface::DKGProtocolEngine, frost::FrostNetworkWrapper,
+		remote::AsyncProtocolRemote, types::LocalKeyType,
+	},
+	db::DKGDbBackend,
+	dkg_modules::{
+		KeygenProtocolSetupParameters, ProtocolInitReturn, SigningProtocolSetupParameters, DKG,
+	},
+	gossip_engine::GossipEngineIface,
+	worker::{DKGWorker, HasLatestHeader, ProtoStageType},
+	Client,
+};
+use async_trait::async_trait;
 use dkg_primitives::types::{DKGError, SSID};
 use itertools::Itertools;
 use rand::{CryptoRng, RngCore};
-use std::{collections::HashMap, fmt::Debug};
-use std::sync::Arc;
-use async_trait::async_trait;
 use sc_client_api::Backend;
 use serde::{Deserialize, Serialize};
 use sp_arithmetic::traits::SaturatedConversion;
 use sp_runtime::traits::Block;
+use std::{collections::HashMap, fmt::Debug, sync::Arc};
 use wsts::{
 	common::{PolyCommitment, PublicNonce, Signature, SignatureShare},
 	v2,
 	v2::SignatureAggregator,
 	Scalar,
 };
-use crate::async_protocols::blockchain_interface::DKGProtocolEngine;
-use crate::async_protocols::frost::keygen::FrostKeygenNetworkWrapper;
-use crate::async_protocols::remote::AsyncProtocolRemote;
-use crate::Client;
-use crate::dkg_modules::{DKG, KeygenProtocolSetupParameters, ProtocolInitReturn, SigningProtocolSetupParameters};
-use crate::gossip_engine::GossipEngineIface;
-use crate::worker::{DKGWorker, HasLatestHeader, ProtoStageType};
 
 /// DKG module for Weighted Threshold Frost
 pub struct WTFrostDKG<B, BE, C, GE>
-	where
-		B: Block,
-		BE: Backend<B>,
-		C: Client<B, BE>,
-		GE: GossipEngineIface,
+where
+	B: Block,
+	BE: Backend<B>,
+	C: Client<B, BE>,
+	GE: GossipEngineIface,
 {
 	pub(super) dkg_worker: DKGWorker<B, BE, C, GE>,
 }
 
 #[async_trait]
 impl<B, BE, C, GE> DKG<B> for WTFrostDKG<B, BE, C, GE>
-	where
-		B: Block,
-		BE: Backend<B>,
-		C: Client<B, BE>,
-		GE: GossipEngineIface,
+where
+	B: Block,
+	BE: Backend<B>,
+	C: Client<B, BE>,
+	GE: GossipEngineIface,
 {
 	async fn initialize_keygen_protocol(
 		&self,
@@ -53,26 +58,37 @@ impl<B, BE, C, GE> DKG<B> for WTFrostDKG<B, BE, C, GE>
 			threshold,
 			session_id,
 			associated_block,
-			stage
-		} = params {
+			stage,
+		} = params
+		{
+			const KEYGEN_SSID: SSID = 0;
 			// We must construct a remote and a task to ensure compatibility with the work manager
 			// and future message delivery to the service
 			let n = best_authorities.len() as u32;
 			// For now, assume each party member owns n keys
 			let k = n;
-			// The party id for frost must be in [0, n). Thus, we just find out index in the best authorities
-			const KEYGEN_SSID: SSID = 0;
+			// The party id for frost must be in [0, n). Thus, we just find out index in the best
+			// authorities
 			let party_id = best_authorities
 				.iter()
 				.find_position(|r| &r.1 == &authority_public_key)
 				.map(|r| r.0 as u32)
 				.expect("Authority ID not found in best authorities");
-			let at = self.dkg_worker.get_latest_block_number();
+			//let at = self.dkg_worker.get_latest_block_number();
 			let associated_block_id = associated_block.saturated_into();
 			let authority_mapping = Default::default(); // TODO
 
-			// Setup the remote to allow communication between the async protocol and the DKG worker
-			let remote = AsyncProtocolRemote::new(at, session_id, self.dkg_worker.logger.clone(), associated_block_id, KEYGEN_SSID, stage, authority_mapping);
+			// Setup the remote to allow communication between the async protocol and the work
+			// manager
+			let remote = AsyncProtocolRemote::new(
+				associated_block_id,
+				session_id,
+				self.dkg_worker.logger.clone(),
+				associated_block_id,
+				KEYGEN_SSID,
+				stage,
+				authority_mapping,
+			);
 
 			// Setup the engine to allow communication between the async protocol and the blockchain
 			let bc_iface = Arc::new(DKGProtocolEngine {
@@ -93,9 +109,18 @@ impl<B, BE, C, GE> DKG<B> for WTFrostDKG<B, BE, C, GE>
 				_pd: Default::default(),
 			});
 
-			let network = FrostKeygenNetworkWrapper::new(self.dkg_worker.clone(), bc_iface.clone(), remote.clone(), authority_id, keygen_protocol_hash);
+			// Allow the async protocol to communicate with the network
+			let network = FrostNetworkWrapper::new(
+				self.dkg_worker.clone(),
+				bc_iface.clone(),
+				remote.clone(),
+				authority_id,
+				keygen_protocol_hash,
+			);
 
-			let task = crate::async_protocols::frost::keygen::proto::protocol(n, party_id, k, threshold, network, bc_iface, session_id);
+			let task = crate::async_protocols::frost::keygen::protocol(
+				n, party_id, k, threshold, network, bc_iface, session_id,
+			);
 
 			Some((remote, task))
 		} else {
@@ -105,9 +130,93 @@ impl<B, BE, C, GE> DKG<B> for WTFrostDKG<B, BE, C, GE>
 
 	async fn initialize_signing_protocol(
 		&self,
-		_params: SigningProtocolSetupParameters<B>,
+		params: SigningProtocolSetupParameters<B>,
 	) -> Result<ProtocolInitReturn<B>, DKGError> {
-		todo!()
+		if let SigningProtocolSetupParameters::WTFrost {
+			unsigned_proposal_batch,
+			authority_id,
+			unsigned_proposal_hash,
+			threshold,
+			session_id,
+			associated_block,
+			stage,
+			ssid,
+		} = params
+		{
+			// Load the state
+			let key = self.dkg_worker.db.get_local_key(session_id)?.ok_or_else(|| {
+				DKGError::GenericError { reason: "Cannot find FROST key".to_string() }
+			})?;
+
+			let (public_key, state) = if let LocalKeyType::FROST(public_key, state) = key {
+				(public_key, state)
+			} else {
+				return Err(DKGError::GenericError {
+					reason: "The obtained local key is NOT a FROST key".to_string(),
+				})
+			};
+
+			// We must construct a remote and a task to ensure compatibility with the work manager
+			// and future message delivery to the service
+
+			let at = self.dkg_worker.get_latest_block_number();
+			let associated_block_id = associated_block.saturated_into();
+			let authority_mapping = Default::default(); // TODO
+
+			// Setup the remote to allow communication between the async protocol and the work
+			// manager
+			let remote = AsyncProtocolRemote::new(
+				at,
+				session_id,
+				self.dkg_worker.logger.clone(),
+				associated_block_id,
+				ssid,
+				stage,
+				authority_mapping,
+			);
+
+			// Setup the engine to allow communication between the async protocol and the blockchain
+			let bc_iface = Arc::new(DKGProtocolEngine {
+				backend: self.dkg_worker.backend.clone(),
+				latest_header: self.dkg_worker.latest_header.clone(),
+				client: self.dkg_worker.client.clone(),
+				keystore: self.dkg_worker.key_store.clone(),
+				db: self.dkg_worker.db.clone(),
+				gossip_engine: self.dkg_worker.gossip_engine.clone(),
+				aggregated_public_keys: self.dkg_worker.aggregated_public_keys.clone(),
+				current_validator_set: self.dkg_worker.current_validator_set.clone(),
+				local_keystore: self.dkg_worker.local_keystore.clone(),
+				vote_results: Arc::new(Default::default()),
+				is_genesis: stage == ProtoStageType::KeygenGenesis,
+				metrics: self.dkg_worker.metrics.clone(),
+				test_bundle: self.dkg_worker.test_bundle.clone(),
+				logger: self.dkg_worker.logger.clone(),
+				_pd: Default::default(),
+			});
+
+			// Allow the async protocol to communicate with the network
+			let network = FrostNetworkWrapper::new(
+				self.dkg_worker.clone(),
+				bc_iface.clone(),
+				remote.clone(),
+				authority_id,
+				unsigned_proposal_hash,
+			);
+
+			let task = crate::async_protocols::frost::sign::protocol(
+				threshold,
+				session_id,
+				network,
+				bc_iface,
+				public_key,
+				state,
+				unsigned_proposal_batch,
+			);
+
+			Ok((remote, task))
+		} else {
+			Err(DKGError::GenericError { reason: "Invalid parameters".to_string() })
+		}
 	}
 
 	fn can_handle_keygen_request(&self, params: &KeygenProtocolSetupParameters<B>) -> bool {
@@ -194,8 +303,8 @@ pub async fn run_dkg<RNG: RngCore + CryptoRng, Net: NetInterface>(
 	Ok(polys)
 }
 
-/// `threshold`: Should be the number of participants in this round, since we stop looking for messages
-/// after finding the first `t` messages
+/// `threshold`: Should be the number of participants in this round, since we stop looking for
+/// messages after finding the first `t` messages
 pub async fn run_signing<RNG: RngCore + CryptoRng, Net: NetInterface>(
 	signer: &mut v2::Party,
 	rng: &mut RNG,
@@ -427,10 +536,7 @@ mod tests {
 		let (tx, _) = tokio::sync::broadcast::channel(1000);
 		let mut networks = (0..N)
 			.into_iter()
-			.map(|_idx| TestNetworkLayer {
-				tx: tx.clone(),
-				rx: tx.subscribe(),
-			})
+			.map(|_idx| TestNetworkLayer { tx: tx.clone(), rx: tx.subscribe() })
 			.collect::<Vec<_>>();
 
 		// Test the DKG
