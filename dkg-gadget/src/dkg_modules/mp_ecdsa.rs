@@ -4,8 +4,6 @@ use crate::{
 		KeygenProtocolSetupParameters, ProtocolInitReturn, SigningProtocolSetupParameters, DKG,
 	},
 	gossip_engine::GossipEngineIface,
-	keygen_manager::KeygenState,
-	signing_manager::SigningResult,
 	worker::{DKGWorker, ProtoStageType},
 	Client,
 };
@@ -14,7 +12,6 @@ use dkg_primitives::types::{DKGError, SSID};
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi, MaxAuthorities, MaxProposalLength};
 use sc_client_api::Backend;
 use sp_runtime::traits::{Block, NumberFor};
-use std::sync::atomic::Ordering;
 
 /// DKG module for Multi-Party ECDSA
 pub struct MpEcdsaDKG<B, BE, C, GE>
@@ -117,7 +114,6 @@ where
 			signing_set,
 			associated_block_id,
 			ssid,
-			unsigned_proposal_hash,
 		} = params
 		{
 			self.dkg_worker.logger.debug(format!("{party_i:?} All Parameters: {best_authorities:?} | authority_pub_key: {authority_public_key:?} | session_id: {session_id:?} | threshold: {threshold:?} | stage: {stage:?} | unsigned_proposal_batch: {unsigned_proposal_batch:?} | signing_set: {signing_set:?} | associated_block_id: {associated_block_id:?}"));

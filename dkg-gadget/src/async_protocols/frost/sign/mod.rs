@@ -1,22 +1,23 @@
 use crate::{
 	async_protocols::{blockchain_interface::BlockchainInterface, types::VoteResult, BatchKey},
 	dkg_modules::wt_frost::NetInterface,
+	utils::SendFuture,
 };
 use codec::Encode;
-use dkg_primitives::types::DKGError;
 use dkg_runtime_primitives::{SessionId, StoredUnsignedProposalBatch};
-use rand::thread_rng;
-use std::{future::Future, pin::Pin};
+use std::pin::Pin;
 use wsts::{
 	common::PolyCommitment,
 	v2::{Party, PartyState},
 };
 
 // TODO prototype testing: see if random selection of keygen parties works
-pub fn protocol<Net: NetInterface, BI: BlockchainInterface>(
+#[allow(clippy::too_many_arguments)]
+pub fn protocol<Net: NetInterface + 'static, BI: BlockchainInterface + 'static>(
 	t: u32,
 	session_id: SessionId,
-	net: Net,
+	batch_key: BatchKey,
+	mut net: Net,
 	bc_iface: BI,
 	public_key: Vec<PolyCommitment>,
 	state: PartyState,
@@ -26,26 +27,24 @@ pub fn protocol<Net: NetInterface, BI: BlockchainInterface>(
 		BI::MaxProposalsInBatch,
 		BI::Clock,
 	>,
-) -> Pin<Box<dyn Future<Output = Result<(), DKGError>>>> {
+) -> Pin<Box<dyn SendFuture<'static, ()>>> {
 	Box::pin(async move {
 		let mut party = Party::load(&state);
-		let mut rng = thread_rng();
+		let mut rng = rand::rngs::OsRng;
 		let k = state.num_keys;
 
-		let batch_key = unsigned_proposal_batch.batch_id.clone();
 		// The message we are signing is the encoded unsigned_proposal_batch
 		let message = unsigned_proposal_batch.proposals.encode();
 
 		let signature = crate::dkg_modules::wt_frost::run_signing(
-			&mut party, &mut rng, &message, net, k, t, public_key,
+			&mut party, &mut rng, &message, &mut net, k, t, public_key,
 		)
 		.await?;
 		bc_iface.process_vote_result(VoteResult::FROST {
-			signature,
+			signature: signature.into(),
 			unsigned_proposal_batch,
 			session_id,
 			batch_key,
-			message,
 		})?;
 		Ok(())
 	})

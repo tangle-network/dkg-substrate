@@ -484,7 +484,7 @@ where
 			// Prevent any signing tasks from running while the keygen is running
 			signing_manager.keygen_lock();
 
-			let task = async move {
+			let task = Box::pin(async move {
 				match task.await {
 					Ok(_) => {
 						keygen_manager.set_state(KeygenState::KeygenCompleted {
@@ -506,7 +506,7 @@ where
 						Err(err)
 					},
 				}
-			};
+			});
 
 			if let Err(err) = self.push_task(handle, task) {
 				dkg_worker.logger.error(format!(

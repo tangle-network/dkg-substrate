@@ -2532,8 +2532,6 @@ dependencies = [
  "dkg-primitives",
  "dkg-runtime-primitives",
  "env_logger 0.9.3",
- "frost-coordinator",
- "frost-signer",
  "futures",
  "hash-db 0.16.0",
  "hex",
@@ -3961,50 +3959,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "frost-coordinator"
-version = "0.0.1"
-source = "git+https://github.com/tbraun96/stacks-sbtc#09c703e9150d72107f43e8d397ec7d158b06543f"
-dependencies = [
- "backoff",
- "clap 4.3.19",
- "frost-signer",
- "hashbrown 0.14.0",
- "p256k1",
- "serde",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber 0.3.17",
- "wsts",
-]
-
-[[package]]
-name = "frost-signer"
-version = "0.0.1"
-source = "git+https://github.com/tbraun96/stacks-sbtc#09c703e9150d72107f43e8d397ec7d158b06543f"
-dependencies = [
- "aes-gcm 0.10.2",
- "async-trait",
- "backoff",
- "bincode",
- "clap 4.3.19",
- "hashbrown 0.14.0",
- "itertools 0.11.0",
- "p256k1",
- "rand 0.8.5",
- "rand_core 0.6.4",
- "reqwest",
- "serde",
- "sha2 0.10.7",
- "thiserror",
- "tokio",
- "toml 0.7.6",
- "tracing",
- "tracing-subscriber 0.3.17",
- "wsts",
-]
-
-[[package]]
 name = "fs-err"
 version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4904,15 +4858,6 @@ name = "itertools"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b0fd2260e829bddf4cb6ea802289de2f86d6a7a690192fbe91b3f46e0f2c8473"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
 dependencies = [
  "either",
 ]

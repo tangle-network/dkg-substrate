@@ -324,7 +324,6 @@ where
 					signing_set: signing_set.signing_set.clone(),
 					associated_block_id: *header.number(),
 					ssid,
-					unsigned_proposal_hash,
 				};
 
 				let signing_protocol = dkg_worker
@@ -338,7 +337,7 @@ where
 						let err_handler_tx = dkg_worker.error_handler_channel.tx.clone();
 						let logger = dkg_worker.logger.clone();
 						let signing_manager = dkg_worker.signing_manager.clone();
-						let task = async move {
+						let task = Box::pin(async move {
 							match task.await {
 								Ok(_) => {
 									logger.info("The meta handler has executed successfully");
@@ -363,7 +362,7 @@ where
 									Err(err)
 								},
 							}
-						};
+						});
 						// Send task to the work manager. Force start if the type chain ID
 						// is None, implying this is a proposal needed for rotating sessions
 						// and thus a priority

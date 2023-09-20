@@ -79,8 +79,6 @@ lazy_static = "1.4.0"
 substrate-api-client = { git = "https://github.com/webb-tools/substrate-api-client" }
 ac-primitives = { git = "https://github.com/webb-tools/substrate-api-client" }
 tokio-websockets = "0.3.3"
-frost-coordinator = { git = "https://github.com/tbraun96/stacks-sbtc" }
-frost-signer = { git = "https://github.com/tbraun96/stacks-sbtc" }
 
 scale-info = { version = "2.1.1", default-features = false, features = ["derive"] }
 

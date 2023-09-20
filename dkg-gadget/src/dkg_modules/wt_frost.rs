@@ -13,12 +13,13 @@ use crate::{
 };
 use async_trait::async_trait;
 use dkg_primitives::types::{DKGError, SSID};
+use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi, MaxAuthorities, MaxProposalLength};
 use itertools::Itertools;
 use rand::{CryptoRng, RngCore};
 use sc_client_api::Backend;
 use serde::{Deserialize, Serialize};
 use sp_arithmetic::traits::SaturatedConversion;
-use sp_runtime::traits::Block;
+use sp_runtime::traits::{Block, NumberFor};
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 use wsts::{
 	common::{PolyCommitment, PublicNonce, Signature, SignatureShare},
@@ -42,8 +43,9 @@ where
 impl<B, BE, C, GE> DKG<B> for WTFrostDKG<B, BE, C, GE>
 where
 	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
+	BE: Backend<B> + Unpin + 'static,
+	C: Client<B, BE> + 'static,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 	GE: GossipEngineIface,
 {
 	async fn initialize_keygen_protocol(
@@ -71,7 +73,7 @@ where
 			// authorities
 			let party_id = best_authorities
 				.iter()
-				.find_position(|r| &r.1 == &authority_public_key)
+				.find_position(|r| r.1 == authority_public_key)
 				.map(|r| r.0 as u32)
 				.expect("Authority ID not found in best authorities");
 			//let at = self.dkg_worker.get_latest_block_number();
@@ -81,7 +83,7 @@ where
 			// Setup the remote to allow communication between the async protocol and the work
 			// manager
 			let remote = AsyncProtocolRemote::new(
-				associated_block_id,
+				associated_block,
 				session_id,
 				self.dkg_worker.logger.clone(),
 				associated_block_id,
@@ -91,7 +93,7 @@ where
 			);
 
 			// Setup the engine to allow communication between the async protocol and the blockchain
-			let bc_iface = Arc::new(DKGProtocolEngine {
+			let bc_iface = DKGProtocolEngine {
 				backend: self.dkg_worker.backend.clone(),
 				latest_header: self.dkg_worker.latest_header.clone(),
 				client: self.dkg_worker.client.clone(),
@@ -107,7 +109,7 @@ where
 				test_bundle: self.dkg_worker.test_bundle.clone(),
 				logger: self.dkg_worker.logger.clone(),
 				_pd: Default::default(),
-			});
+			};
 
 			// Allow the async protocol to communicate with the network
 			let network = FrostNetworkWrapper::new(
@@ -141,6 +143,7 @@ where
 			associated_block,
 			stage,
 			ssid,
+			batch_key,
 		} = params
 		{
 			// Load the state
@@ -176,7 +179,7 @@ where
 			);
 
 			// Setup the engine to allow communication between the async protocol and the blockchain
-			let bc_iface = Arc::new(DKGProtocolEngine {
+			let bc_iface = DKGProtocolEngine {
 				backend: self.dkg_worker.backend.clone(),
 				latest_header: self.dkg_worker.latest_header.clone(),
 				client: self.dkg_worker.client.clone(),
@@ -192,7 +195,7 @@ where
 				test_bundle: self.dkg_worker.test_bundle.clone(),
 				logger: self.dkg_worker.logger.clone(),
 				_pd: Default::default(),
-			});
+			};
 
 			// Allow the async protocol to communicate with the network
 			let network = FrostNetworkWrapper::new(
@@ -206,6 +209,7 @@ where
 			let task = crate::async_protocols::frost::sign::protocol(
 				threshold,
 				session_id,
+				batch_key,
 				network,
 				bc_iface,
 				public_key,
@@ -269,7 +273,7 @@ pub async fn run_dkg<RNG: RngCore + CryptoRng, Net: NetInterface>(
 			},
 
 			Ok(Some(_)) | Err(_) => {},
-			None =>
+			Ok(None) =>
 				return Err(DKGError::GenericError {
 					reason: "NetListen connection died".to_string(),
 				}),
@@ -294,7 +298,7 @@ pub async fn run_dkg<RNG: RngCore + CryptoRng, Net: NetInterface>(
 		.collect();
 	let polys = received_poly_commitments
 		.iter()
-		.sorted_by(|a, b| a.0.cmp(&b.0))
+		.sorted_by(|a, b| a.0.cmp(b.0))
 		.map(|r| r.1.clone())
 		.collect_vec();
 	signer
@@ -339,7 +343,7 @@ pub async fn run_signing<RNG: RngCore + CryptoRng, Net: NetInterface>(
 			},
 
 			Ok(Some(_)) | Err(_) => {},
-			None =>
+			Ok(None) =>
 				return Err(DKGError::GenericError {
 					reason: "NetListen connection died".to_string(),
 				}),
@@ -347,7 +351,7 @@ pub async fn run_signing<RNG: RngCore + CryptoRng, Net: NetInterface>(
 	}
 
 	// Sort the vecs
-	let party_ids = (0..threshold).into_iter().collect_vec();
+	let party_ids = (0..threshold).collect_vec();
 	let party_key_ids = party_key_ids
 		.into_iter()
 		.sorted_by(|a, b| a.0.cmp(&b.0))
@@ -378,7 +382,7 @@ pub async fn run_signing<RNG: RngCore + CryptoRng, Net: NetInterface>(
 			},
 
 			Ok(Some(_)) | Err(_) => {},
-			None =>
+			Ok(None) =>
 				return Err(DKGError::GenericError {
 					reason: "NetListen connection died".to_string(),
 				}),
@@ -471,7 +475,7 @@ pub enum FrostMessage {
 }
 
 #[async_trait::async_trait]
-pub trait NetInterface {
+pub trait NetInterface: Send {
 	type Error: Debug;
 
 	async fn next_message(&mut self) -> Result<Option<FrostMessage>, Self::Error>;

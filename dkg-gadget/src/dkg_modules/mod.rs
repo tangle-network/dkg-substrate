@@ -1,5 +1,5 @@
 use crate::{
-	async_protocols::{remote::AsyncProtocolRemote, KeygenPartyId},
+	async_protocols::{remote::AsyncProtocolRemote, BatchKey, KeygenPartyId},
 	gossip_engine::GossipEngineIface,
 	utils::SendFuture,
 	worker::{DKGWorker, ProtoStageType},
@@ -64,7 +64,6 @@ pub enum SigningProtocolSetupParameters<B: Block> {
 		signing_set: Vec<KeygenPartyId>,
 		associated_block_id: NumberFor<B>,
 		ssid: SSID,
-		unsigned_proposal_hash: [u8; 32],
 	},
 	WTFrost {
 		authority_id: AuthorityId,
@@ -77,6 +76,7 @@ pub enum SigningProtocolSetupParameters<B: Block> {
 		>,
 		threshold: u32,
 		session_id: SessionId,
+		batch_key: BatchKey,
 		associated_block: NumberFor<B>,
 		stage: ProtoStageType,
 		ssid: SSID,

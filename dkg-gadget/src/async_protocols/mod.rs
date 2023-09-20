@@ -61,7 +61,10 @@ use self::{
 	blockchain_interface::BlockchainInterface, remote::AsyncProtocolRemote,
 	state_machine::StateMachineHandler, state_machine_wrapper::StateMachineWrapper,
 };
-use crate::{debug_logger::DebugLogger, utils::SendFuture, worker::KeystoreExt, DKGKeystore};
+use crate::{
+	async_protocols::types::LocalKeyType, debug_logger::DebugLogger, utils::SendFuture,
+	worker::KeystoreExt, DKGKeystore,
+};
 use dkg_logging::debug_logger::AsyncProtocolType;
 use incoming::IncomingAsyncProtocolWrapper;
 use multi_party_ecdsa::MessageRoundID;
@@ -70,7 +73,7 @@ pub struct AsyncProtocolParameters<
 	BI: BlockchainInterface,
 	MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 > {
-	pub engine: Arc<BI>,
+	pub engine: BI,
 	pub keystore: DKGKeystore,
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public, MaxAuthorities>>>,
 	pub best_authorities: Arc<Vec<(KeygenPartyId, Public)>>,
@@ -80,7 +83,7 @@ pub struct AsyncProtocolParameters<
 	pub batch_id_gen: Arc<AtomicU64>,
 	pub handle: AsyncProtocolRemote<BI::Clock>,
 	pub session_id: SessionId,
-	pub local_key: Option<LocalKey<Secp256k1>>,
+	pub local_key: Option<LocalKeyType>,
 	pub logger: DebugLogger,
 	pub db: Arc<dyn crate::db::DKGDbBackend>,
 }

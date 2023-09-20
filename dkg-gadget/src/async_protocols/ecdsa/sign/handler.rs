@@ -34,13 +34,17 @@ use crate::{
 		new_inner,
 		remote::{MetaHandlerStatus, ShutdownReason},
 		state_machine::StateMachineHandler,
+		types::{LocalKeyType, VoteResult},
 		AsyncProtocolParameters, BatchKey, GenericAsyncHandler, KeygenPartyId, OfflinePartyId,
 		ProtocolType, Threshold,
 	},
 	utils::bad_actors_to_authorities,
 };
 use dkg_logging::debug_logger::RoundsEventType;
-use dkg_primitives::types::{DKGError, DKGMessage, NetworkMsgPayload, SignedDKGMessage};
+use dkg_primitives::{
+	types::{DKGError, DKGMessage, NetworkMsgPayload, SignedDKGMessage},
+	utils::convert_signature,
+};
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	MaxAuthorities,
@@ -88,7 +92,7 @@ where
 
 		let protocol = async move {
 			let maybe_local_key = params.local_key.clone();
-			if let Some(local_key) = maybe_local_key {
+			if let Some(LocalKeyType::ECDSA(local_key)) = maybe_local_key {
 				let t = threshold;
 
 				start_rx
@@ -380,13 +384,18 @@ where
 				reason: format!("Verification of voting stage failed with error : {err:?}"),
 			})?;
 			params.logger.info_signing("RD3");
-			params.engine.process_vote_result(
+			let signature = convert_signature(&signature).ok_or_else(|| {
+				DKGError::CriticalError { reason: "Unable to serialize signature".to_string() }
+			})?;
+			params.logger.info_signing("RD4");
+
+			let result = VoteResult::ECDSA {
 				signature,
 				unsigned_proposal_batch,
-				params.session_id,
+				session_id: params.session_id,
 				batch_key,
-				message,
-			)?;
+			};
+			params.engine.process_vote_result(result)?;
 			params.logger.round_event(
 				&ty,
 				RoundsEventType::ProceededToRound { session: params.session_id, round: 9999999999 },

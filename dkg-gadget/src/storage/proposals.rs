@@ -16,7 +16,7 @@ use codec::Encode;
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS,
-	AuthoritySet, DKGApi, SignedProposalBatch,
+	AuthoritySet, DKGApi,
 };
 use parking_lot::RwLock;
 use rand::Rng;

@@ -2,17 +2,19 @@ use crate::{
 	async_protocols::{blockchain_interface::BlockchainInterface, remote::AsyncProtocolRemote},
 	dkg_modules::wt_frost::{FrostMessage, NetInterface},
 	gossip_engine::GossipEngineIface,
-	worker::DKGWorker,
+	worker::{DKGWorker, ProtoStageType},
 	Client,
 };
+use async_trait::async_trait;
 use dkg_primitives::types::{DKGError, DKGMessage, NetworkMsgPayload, SignedDKGMessage, SSID};
 use dkg_runtime_primitives::{
 	crypto::AuthorityId,
 	gossip_messages::{DKGKeygenMessage, DKGOfflineMessage},
+	DKGApi, MaxAuthorities, MaxProposalLength,
 };
 use sc_client_api::Backend;
 use sp_core::hashing::sha2_256;
-use sp_runtime::traits::Block;
+use sp_runtime::traits::{Block, Header, NumberFor};
 use std::collections::HashSet;
 use tokio::sync::mpsc::UnboundedReceiver;
 
@@ -27,7 +29,7 @@ where
 	GE: GossipEngineIface,
 {
 	pub dkg_worker: DKGWorker<B, BE, C, GE>,
-	pub remote: AsyncProtocolRemote<C>,
+	pub remote: AsyncProtocolRemote<<<B as Block>::Header as Header>::Number>,
 	pub message_receiver: UnboundedReceiver<SignedDKGMessage<AuthorityId>>,
 	pub authority_id: AuthorityId,
 	pub proto_hash: [u8; 32],
@@ -36,11 +38,18 @@ where
 	pub ssid: SSID,
 }
 
-impl<B, BE, C, GE, BI: BlockchainInterface> FrostNetworkWrapper<B, BE, C, GE, BI> {
+impl<B, BE, C, GE, BI: BlockchainInterface> FrostNetworkWrapper<B, BE, C, GE, BI>
+where
+	B: Block,
+	BE: Backend<B> + Unpin,
+	C: Client<B, BE>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
+	GE: GossipEngineIface,
+{
 	pub fn new(
 		dkg_worker: DKGWorker<B, BE, C, GE>,
 		engine: BI,
-		remote: AsyncProtocolRemote<C>,
+		remote: AsyncProtocolRemote<<<B as Block>::Header as Header>::Number>,
 		authority_id: AuthorityId,
 		proto_hash: [u8; 32],
 	) -> Self {
@@ -62,6 +71,7 @@ impl<B, BE, C, GE, BI: BlockchainInterface> FrostNetworkWrapper<B, BE, C, GE, BI
 	}
 }
 
+#[async_trait]
 impl<B, BE, C, GE, BI: BlockchainInterface> NetInterface for FrostNetworkWrapper<B, BE, C, GE, BI>
 where
 	B: Block,
@@ -73,34 +83,37 @@ where
 
 	async fn next_message(&mut self) -> Result<Option<FrostMessage>, Self::Error> {
 		loop {
-			let message = self.message_receiver.recv().await?;
-			// When we receive a message, it is filtered through the Job Manager, and as such
-			// we have these guarantees:
-			// * The SSID is correct, the block ID and session ID are acceptable, and the task hash
-			//   is correct
-			// We do not need to check these things here, but we do need to check the signature
-			match self.engine.verify_signature_against_authorities(message).await {
-				Ok(message) => {
-					let message_bin = message.payload.payload();
-					let message_hash = sha2_256(message_bin);
+			if let Some(message) = self.message_receiver.recv().await {
+				// When we receive a message, it is filtered through the Job Manager, and as such
+				// we have these guarantees:
+				// * The SSID is correct, the block ID and session ID are acceptable, and the task
+				//   hash is correct
+				// We do not need to check these things here, but we do need to check the signature
+				match self.engine.verify_signature_against_authorities(message).await {
+					Ok(message) => {
+						let message_bin = message.payload.payload();
+						let message_hash = sha2_256(message_bin);
 
-					// Check to make sure we haven't already received the message
-					if !self.received_messages.insert(message_hash) {
-						self.dkg_worker
-							.logger
-							.info("Received duplicate FROST keygen message, ignoring");
-						continue
-					}
+						// Check to make sure we haven't already received the message
+						if !self.received_messages.insert(message_hash) {
+							self.dkg_worker
+								.logger
+								.info("Received duplicate FROST keygen message, ignoring");
+							continue
+						}
 
-					let deserialized = bincode2::deserialize::<FrostMessage>(message_bin)
-						.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
-					return Ok(Some(deserialized))
-				},
-				Err(err) => {
-					self.dkg_worker
-						.logger
-						.info(format!("Received invalid FROST keygen message, ignoring: {err:?}"));
-				},
+						let deserialized = bincode2::deserialize::<FrostMessage>(message_bin)
+							.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
+						return Ok(Some(deserialized))
+					},
+					Err(err) => {
+						self.dkg_worker.logger.info(format!(
+							"Received invalid FROST keygen message, ignoring: {err:?}"
+						));
+					},
+				}
+			} else {
+				return Ok(None)
 			}
 		}
 	}
@@ -118,8 +131,9 @@ where
 			})
 		} else {
 			NetworkMsgPayload::Keygen(DKGKeygenMessage {
-				sender_id: 0, /* We do not care to put the sender ID in the message for FROST,
-				               * since it is already inside the FrostMessage */
+				sender_id: 0,          /* We do not care to put the sender ID in the message for
+				                        * FROST, since it is already
+				                        * inside the FrostMessage */
 				keygen_msg: frost_msg, // The Frost Message
 				keygen_protocol_hash: self.proto_hash,
 			})
