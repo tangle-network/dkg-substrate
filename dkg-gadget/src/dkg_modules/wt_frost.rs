@@ -486,6 +486,7 @@ pub trait NetInterface: Send {
 mod tests {
 	use crate::dkg_modules::wt_frost::{FrostMessage, NetInterface};
 	use futures::{stream::FuturesUnordered, TryStreamExt};
+	use rand::prelude::SliceRandom;
 
 	struct TestNetworkLayer {
 		tx: tokio::sync::broadcast::Sender<FrostMessage>,
@@ -574,6 +575,8 @@ mod tests {
 		// Start by choosing signers. Since our indexes, in reality, will be based on the set of
 		// best authorities, we will choose the best of the best of authorities, so from 0..T
 		let signers = FuturesUnordered::new();
+
+		// parties.shuffle(rng);
 
 		for (party, network) in parties.iter_mut().zip(networks.iter_mut()).take(T as _) {
 			let public_key = public_key.clone();
