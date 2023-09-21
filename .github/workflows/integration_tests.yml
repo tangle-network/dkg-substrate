@@ -14,7 +14,7 @@ jobs:
   # dkg-substrate integration tests
   local_chain:
     name: Local Chain Tests
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - name: Cancel Previous Runs
         uses: styfle/cancel-workflow-action@0.9.1
@@ -48,7 +48,7 @@ jobs:
           toolchain: nightly
 
       - name: Install Protobuf
-        run: sudo apt-get install protobuf-compiler
+        run: brew install protobuf
 
       - name: Install cargo make
         run: cargo install --force cargo-make

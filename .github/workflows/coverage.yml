@@ -43,7 +43,7 @@ jobs:
         run: cargo install cargo-tarpaulin
 
       - name: Run Tarpaulin
-        run : cargo tarpaulin --out Xml -p pallet-dkg-metadata -p pallet-dkg-proposal-handler -p pallet-dkg-proposals -p dkg-primitives -p dkg-runtime-primitives --locked --jobs 16 --timeout 3600 --skip-clean -- --test-threads 16
+        run : cargo tarpaulin --out xml -p pallet-dkg-metadata -p pallet-dkg-proposal-handler -p pallet-dkg-proposals -p dkg-primitives -p dkg-runtime-primitives --locked --jobs 16 --timeout 3600 --skip-clean -- --test-threads 16
 
       - name: Upload CodeCov
         uses: codecov/codecov-action@v2
