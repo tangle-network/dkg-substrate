@@ -13,7 +13,7 @@ env:
 jobs:
   harness:
     name: Harness
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - name: Cancel Previous Runs
         uses: styfle/cancel-workflow-action@0.9.1
@@ -48,8 +48,9 @@ jobs:
 
       - name: Install Protobuf and LLVM
         run: |
-          sudo apt-get install protobuf-compiler
-          sudo apt install llvm
+          brew install protobuf llvm
+          export LIBRARY_PATH=$LIBRARY_PATH:/opt/homebrew/lib
+          export INCLUDE_PATH=$INCLUDE_PATH:/opt/homebrew/include
 
       - name: t2n3 && 1 proposal per session
         run: cargo run --package dkg-test-orchestrator --features=debug-tracing -- --tmp /tmp --threshold 2 --n 3 --bind 127.0.0.1:7777 --n-tests 10 -p 1
