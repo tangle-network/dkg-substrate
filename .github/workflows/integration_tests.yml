@@ -14,7 +14,7 @@ jobs:
   # dkg-substrate integration tests
   local_chain:
     name: Local Chain Tests
-    runs-on: macos-latest
+    runs-on: windows-latest
     steps:
       - name: Cancel Previous Runs
         uses: styfle/cancel-workflow-action@0.9.1
@@ -49,9 +49,7 @@ jobs:
 
       - name: Install Protobuf and LLVM
         run: |
-          brew install protobuf llvm
-          export LIBRARY_PATH=$LIBRARY_PATH:/opt/homebrew/lib
-          export INCLUDE_PATH=$INCLUDE_PATH:/opt/homebrew/include
+          choco install protobuf llvm
 
       - name: Install cargo make
         run: cargo install --force cargo-make
