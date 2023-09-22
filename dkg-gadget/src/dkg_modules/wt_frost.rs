@@ -268,7 +268,6 @@ pub async fn run_dkg<RNG: RngCore + CryptoRng, Net: NetInterface>(
 		match net.next_message().await {
 			Ok(Some(FrostMessage::DKG { party_id, shares, key_ids, poly_commitment })) =>
 				if party_id != signer.party_id {
-					dkg_logging::info!(target: "dkg", "Received DKG message from {party_id}, we are {party_id_recv}", party_id = party_id, party_id_recv = signer.party_id);
 					received_shares.insert(party_id, shares);
 					received_key_ids.insert(party_id, key_ids);
 					received_poly_commitments.insert(party_id, poly_commitment);
@@ -341,7 +340,6 @@ pub async fn run_signing<RNG: RngCore + CryptoRng, Net: NetInterface>(
 		match net.next_message().await {
 			Ok(Some(FrostMessage::Sign { party_id: party_id_recv, key_ids, nonce })) => {
 				if party_id != party_id_recv {
-					dkg_logging::info!(target: "dkg", "Received Sign message from {party_id_recv}, we are {party_id}");
 					party_key_ids.insert(party_id_recv, key_ids);
 					party_nonces.insert(party_id_recv, nonce);
 				}
@@ -513,8 +511,23 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn test_n3t2k3() {
+	async fn test_frost_n3t2k3() {
 		test_inner::<3, 2, 3>().await;
+	}
+
+	#[tokio::test]
+	async fn test_frost_n10t6k10() {
+		test_inner::<10, 6, 10>().await;
+	}
+
+	#[tokio::test]
+	async fn test_frost_n5t3k5() {
+		test_inner::<5, 3, 5>().await;
+	}
+
+	#[tokio::test]
+	async fn test_frost_n20t15k20() {
+		test_inner::<20, 15, 20>().await;
 	}
 
 	async fn test_inner<const N: u32, const T: u32, const K: u32>() {
