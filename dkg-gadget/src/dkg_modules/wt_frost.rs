@@ -266,11 +266,13 @@ pub async fn run_dkg<RNG: RngCore + CryptoRng, Net: NetInterface>(
 	// Wait for n_signers to send their messages to us
 	while received_shares.len() < n_signers {
 		match net.next_message().await {
-			Ok(Some(FrostMessage::DKG { party_id, shares, key_ids, poly_commitment })) => {
-				received_shares.insert(party_id, shares);
-				received_key_ids.insert(party_id, key_ids);
-				received_poly_commitments.insert(party_id, poly_commitment);
-			},
+			Ok(Some(FrostMessage::DKG { party_id, shares, key_ids, poly_commitment })) =>
+				if party_id != signer.party_id {
+					dkg_logging::info!(target: "dkg", "Received DKG message from {party_id}, we are {party_id_recv}", party_id = party_id, party_id_recv = signer.party_id);
+					received_shares.insert(party_id, shares);
+					received_key_ids.insert(party_id, key_ids);
+					received_poly_commitments.insert(party_id, poly_commitment);
+				},
 
 			Ok(Some(_)) | Err(_) => {},
 			Ok(None) =>
@@ -338,8 +340,11 @@ pub async fn run_signing<RNG: RngCore + CryptoRng, Net: NetInterface>(
 	while party_nonces.len() < threshold as usize {
 		match net.next_message().await {
 			Ok(Some(FrostMessage::Sign { party_id: party_id_recv, key_ids, nonce })) => {
-				party_key_ids.insert(party_id_recv, key_ids);
-				party_nonces.insert(party_id_recv, nonce);
+				if party_id != party_id_recv {
+					dkg_logging::info!(target: "dkg", "Received Sign message from {party_id_recv}, we are {party_id}");
+					party_key_ids.insert(party_id_recv, key_ids);
+					party_nonces.insert(party_id_recv, nonce);
+				}
 			},
 
 			Ok(Some(_)) | Err(_) => {},
@@ -351,7 +356,7 @@ pub async fn run_signing<RNG: RngCore + CryptoRng, Net: NetInterface>(
 	}
 
 	// Sort the vecs
-	let party_ids = (0..threshold).collect_vec();
+	let party_ids = party_key_ids.keys().copied().sorted_by(|a, b| a.cmp(b)).collect_vec();
 	let party_key_ids = party_key_ids
 		.into_iter()
 		.sorted_by(|a, b| a.0.cmp(&b.0))
@@ -377,9 +382,10 @@ pub async fn run_signing<RNG: RngCore + CryptoRng, Net: NetInterface>(
 	// Receive n_signers number of shares
 	while signature_shares.len() < threshold as usize {
 		match net.next_message().await {
-			Ok(Some(FrostMessage::SignFinal { party_id, signature_share })) => {
-				signature_shares.insert(party_id, signature_share);
-			},
+			Ok(Some(FrostMessage::SignFinal { party_id: party_id_recv, signature_share })) =>
+				if party_id != party_id_recv {
+					signature_shares.insert(party_id_recv, signature_share);
+				},
 
 			Ok(Some(_)) | Err(_) => {},
 			Ok(None) =>
@@ -576,7 +582,8 @@ mod tests {
 		// best authorities, we will choose the best of the best of authorities, so from 0..T
 		let signers = FuturesUnordered::new();
 
-		// parties.shuffle(rng);
+		// Prove that no matter which signing set we choose, we get a valid Schnorr signature
+		parties.shuffle(rng);
 
 		for (party, network) in parties.iter_mut().zip(networks.iter_mut()).take(T as _) {
 			let public_key = public_key.clone();

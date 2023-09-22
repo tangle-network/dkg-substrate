@@ -12880,7 +12880,7 @@ checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
  "cfg-if",
  "digest 0.10.7",
- "rand 0.4.6",
+ "rand 0.8.5",
  "static_assertions",
 ]
 
@@ -14459,9 +14459,9 @@ dependencies = [
 
 [[package]]
 name = "wsts"
-version = "2.0.0"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9822f9052b53d23fb9535781ee904e444cb5292788ae2f08e08de27eb765b39c"
+checksum = "08b241e8440197fcd6e214a26fcaac82d7cdfde3ae964586f4b1a7c41a21ba6f"
 dependencies = [
  "bs58 0.5.0",
  "hashbrown 0.14.0",
