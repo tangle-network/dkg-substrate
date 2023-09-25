@@ -44,7 +44,7 @@ jobs:
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: nightly
+          toolchain: stable
 
       - name: Install Protobuf and LLVM
         run: |
