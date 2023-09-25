@@ -49,7 +49,7 @@ jobs:
 
       - name: Install Protobuf and LLVM
         run: |
-          sudo apt-get install protobuf-compiler llvm libsecp256k1-dev libsecp256k1
+          sudo apt-get install protobuf-compiler llvm libsecp256k1-dev libsecp256k1-0 libsecp256k1-1
 
       - name: Install cargo make
         run: cargo install --force cargo-make
