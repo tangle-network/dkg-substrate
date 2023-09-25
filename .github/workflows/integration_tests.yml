@@ -49,7 +49,7 @@ jobs:
 
       - name: Install Protobuf and LLVM
         run: |
-          sh ./scripts/bitcoin.sh
+          bash ./scripts/bitcoin.sh
           sudo apt-get install protobuf-compiler llvm libsecp256k1-dev libsecp256k1-0 libclang-dev
 
       - name: Install cargo make
