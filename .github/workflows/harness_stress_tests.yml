@@ -23,14 +23,6 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Configure sccache
-        run: |
-          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
-
-      - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.3
-
       - name: Restore Cache
         if: always()
         uses: actions/cache/restore@v3
@@ -47,9 +39,7 @@ jobs:
           toolchain: stable
 
       - name: Install Protobuf and LLVM
-        run: |
-          bash ./scripts/bitcoin.sh
-          sudo apt-get install protobuf-compiler llvm libsecp256k1-dev libsecp256k1-0 libclang-dev
+        run: sudo apt-get install protobuf-compiler llvm libclang-dev
 
       - name: t2n3 && 1 proposal per session
         run: cargo run --package dkg-test-orchestrator --features=debug-tracing -- --tmp /tmp --threshold 2 --n 3 --bind 127.0.0.1:7777 --n-tests 10 -p 1
