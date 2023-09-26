@@ -12,7 +12,7 @@ env:
 
 jobs:
   harness:
-    name: Harness
+    name: Tests
     runs-on: ubuntu-latest
     steps:
       - name: Cancel Previous Runs
