@@ -40,7 +40,7 @@ jobs:
           toolchain: stable
 
       - name: Install Protobuf and LLVM
-        run: brew install protobuf-compiler llvm
+        run: brew install protobuf llvm
 
       - name: Install cargo make
         run: cargo install cargo-make
