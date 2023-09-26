@@ -25,7 +25,7 @@ curv = { workspace = true }
 
 codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive"] }
 prometheus = { workspace = true }
-wsts = { git = "https://github.com/webb-tools/wsts" }
+wsts = "3.0.0"
 
 sp-api = { workspace = true }
 sp-application-crypto = { workspace = true }
