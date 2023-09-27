@@ -4,15 +4,13 @@
 
 use std::sync::Arc;
 
-use crate::debug_logger::DebugLogger;
-use curv::elliptic::curves::Secp256k1;
+use crate::{async_protocols::types::LocalKeyType, debug_logger::DebugLogger};
 use dkg_primitives::{
 	types::DKGError,
 	utils::{decrypt_data, encrypt_data},
 	SessionId,
 };
 use dkg_runtime_primitives::offchain::crypto::{Pair as AppPair, Public};
-use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 use sc_client_api::Backend;
 use sc_keystore::LocalKeystore;
 use sp_core::{offchain::OffchainStorage, Pair};
@@ -77,10 +75,7 @@ where
 	B: Block,
 	BE: Backend<B> + Unpin + 'static,
 {
-	fn get_local_key(
-		&self,
-		session_id: SessionId,
-	) -> Result<Option<LocalKey<Secp256k1>>, DKGError> {
+	fn get_local_key(&self, session_id: SessionId) -> Result<Option<LocalKeyType>, DKGError> {
 		self.logger
 			.trace(format!("Offchain Storage : Fetching local keys for session {session_id:?}"));
 		let db_key = keys::LocalKey::new(session_id);
@@ -101,7 +96,7 @@ where
 	fn store_local_key(
 		&self,
 		session_id: SessionId,
-		local_key: LocalKey<Secp256k1>,
+		local_key: LocalKeyType,
 	) -> Result<(), DKGError> {
 		self.logger.trace(format!(
 			"Offchain Storage : Store local keys for session {session_id:?}, Key : {local_key:?}"

@@ -1,4 +1,4 @@
-name: check
+name: Coverage Tests
 
 on:
   push:
@@ -13,7 +13,7 @@ jobs:
   # code coverage job; moved to own workflow file due to running out of disk space.
   # The runner will stop working when the machine runs out of disk space. Free space left: 72 MB
   coverage:
-    name: coverage
+    name: Tests
     runs-on: ubuntu-latest
     steps:
       - name: Cancel Previous Runs
@@ -43,7 +43,7 @@ jobs:
         run: cargo install cargo-tarpaulin
 
       - name: Run Tarpaulin
-        run : cargo tarpaulin --out Xml -p pallet-dkg-metadata -p pallet-dkg-proposal-handler -p pallet-dkg-proposals -p dkg-primitives -p dkg-runtime-primitives --locked --jobs 16 --timeout 3600 --skip-clean -- --test-threads 16
+        run : cargo tarpaulin --out xml -p pallet-dkg-metadata -p pallet-dkg-proposal-handler -p pallet-dkg-proposals -p dkg-primitives -p dkg-runtime-primitives --locked --jobs 16 --timeout 3600 --skip-clean -- --test-threads 16
 
       - name: Upload CodeCov
         uses: codecov/codecov-action@v2

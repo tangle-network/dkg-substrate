@@ -19,7 +19,6 @@ use crate::{
 	debug_logger::DebugLogger,
 };
 use codec::{Codec, Encode};
-use curv::elliptic::curves::Secp256k1;
 use sc_network::NetworkService;
 use sc_network_sync::SyncingService;
 use sp_consensus::SyncOracle;
@@ -27,7 +26,6 @@ use sp_consensus::SyncOracle;
 use crate::signing_manager::SigningManager;
 use dkg_primitives::types::SSID;
 use futures::StreamExt;
-use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 use parking_lot::{Mutex, RwLock};
 use sc_client_api::{Backend, FinalityNotification};
 use sc_keystore::LocalKeystore;
@@ -57,7 +55,7 @@ use dkg_runtime_primitives::{
 
 pub use crate::constants::worker::*;
 use crate::{
-	async_protocols::{remote::AsyncProtocolRemote, AsyncProtocolParameters},
+	async_protocols::{remote::AsyncProtocolRemote, types::LocalKeyType, AsyncProtocolParameters},
 	dkg_modules::DKGModules,
 	error,
 	gossip_engine::GossipEngineIface,
@@ -353,7 +351,7 @@ where
 		));
 
 		let params = AsyncProtocolParameters {
-			engine: Arc::new(DKGProtocolEngine {
+			engine: DKGProtocolEngine {
 				backend: self.backend.clone(),
 				latest_header: self.latest_header.clone(),
 				client: self.client.clone(),
@@ -361,8 +359,6 @@ where
 				db: self.db.clone(),
 				gossip_engine: self.gossip_engine.clone(),
 				aggregated_public_keys: self.aggregated_public_keys.clone(),
-				best_authorities: best_authorities.clone(),
-				authority_public_key: authority_public_key.clone(),
 				current_validator_set: self.current_validator_set.clone(),
 				local_keystore: self.local_keystore.clone(),
 				vote_results: Arc::new(Default::default()),
@@ -371,7 +367,7 @@ where
 				test_bundle: self.test_bundle.clone(),
 				logger: self.logger.clone(),
 				_pd: Default::default(),
-			}),
+			},
 			session_id,
 			db: self.db.clone(),
 			keystore: self.key_store.clone(),
@@ -405,7 +401,7 @@ where
 	fn fetch_local_keys(
 		&self,
 		current_session_id: SessionId,
-	) -> (Option<LocalKey<Secp256k1>>, Option<LocalKey<Secp256k1>>) {
+	) -> (Option<LocalKeyType>, Option<LocalKeyType>) {
 		let next_session_id = current_session_id + 1;
 		let active_local_key = self.db.get_local_key(current_session_id).ok().flatten();
 		let next_local_key = self.db.get_local_key(next_session_id).ok().flatten();
