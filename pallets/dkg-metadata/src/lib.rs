@@ -144,6 +144,12 @@ use weights::WeightInfo;
 // Reputation assigned to genesis authorities
 pub const INITIAL_REPUTATION: u32 = 1_000_000_000;
 
+// Our goal is to trigger the ShouldExecuteNewKeygen to true if we have passed exactly X blocks from the last session rotation
+// and still have not seen a new key, this value cannot be too small either because we need to accomodate delays between `keygen
+// process starting + completion + posted onchain`. If the delay is smaller than the above then we might inadvertently rotate 
+// sessions.
+pub const BLOCKS_TO_WAIT_BEFORE_KEYGEN_RETRY_TRIGGER : u32 = 20;
+
 // Reputation increase awarded to authorities on submission of next public key
 pub const REPUTATION_INCREMENT: u32 = INITIAL_REPUTATION / 1000;
 
@@ -403,12 +409,12 @@ pub mod pallet {
 
 			// Our goal is to trigger the ShouldExecuteNewKeygen if either of the two conditions are
 			// true : 1. A SessionPeriod of blocks have passed from the LastSessionRotationBlock
-			// 2. If 1 is true and we have not yet seen NextKey on chain for the last 10 blocks
+			// 2. If 1 is true and we have not yet seen NextKey on chain for the last BLOCKS_TO_WAIT_BEFORE_KEYGEN_RETRY_TRIGGER blocks
 			// check if we have passed exactly `Period` blocks from the last session rotation
 			let blocks_passed_since_last_session_rotation =
 				n - LastSessionRotationBlock::<T>::get();
 			if blocks_passed_since_last_session_rotation >= T::SessionPeriod::get() &&
-				blocks_passed_since_last_session_rotation % 10u32.into() == 0u32.into()
+				blocks_passed_since_last_session_rotation % BLOCKS_TO_WAIT_BEFORE_KEYGEN_RETRY_TRIGGER.into() == 0u32.into()
 			{
 				// lets set the ShouldStartDKG to true
 				// we dont set force_keygen to true, that is reserved for emergency rotate
