@@ -140,7 +140,7 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn bridges)]
 	/// Storage for map of all bridges
-	pub(super) type Bridges<T: Config> = StorageMap<
+	pub type Bridges<T: Config> = StorageMap<
 		_,
 		Blake2_256,
 		T::BridgeIndex,
@@ -150,7 +150,7 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn resource_to_bridge_index)]
 	/// Mapping of resource to bridge index
-	pub(super) type ResourceToBridgeIndex<T: Config> =
+	pub type ResourceToBridgeIndex<T: Config> =
 		StorageMap<_, Blake2_256, ResourceId, T::BridgeIndex>;
 
 	#[pallet::event]
