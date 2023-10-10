@@ -211,6 +211,13 @@ pub mod pallet {
 			+ Into<ecdsa::Public>
 			+ From<ecdsa::Public>
 			+ MaxEncodedLen;
+		/// Convert DKG AuthorityId to a form that would end up in the Merkle Tree.
+		///
+		/// For instance for ECDSA (secp256k1) we want to store uncompressed public keys (65 bytes)
+		/// and later to Ethereum Addresses (160 bits) to simplify using them on Ethereum chain,
+		/// but the rest of the Substrate codebase is storing them compressed (33 bytes) for
+		/// efficiency reasons.
+		type DKGAuthorityToMerkleLeaf: Convert<Self::DKGId, Vec<u8>>;
 		/// Jail lengths for misbehaviours
 		type KeygenJailSentence: Get<BlockNumberFor<Self>>;
 		type SigningJailSentence: Get<BlockNumberFor<Self>>;
@@ -1637,7 +1644,7 @@ impl<T: Config> Pallet<T> {
 		// Hash the external accounts into 32 byte chunks to form the base layer of the merkle tree
 		let mut base_layer: Vec<[u8; 32]> = voters
 			.iter()
-			.map(|account| account.to_raw_vec())
+			.map(|account| T::DKGAuthorityToMerkleLeaf::convert(account.clone()))
 			.map(|account| keccak_256(&account))
 			.collect();
 		// Pad base_layer to have length 2^height

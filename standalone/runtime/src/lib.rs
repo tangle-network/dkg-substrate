@@ -607,6 +607,7 @@ parameter_types! {
 
 impl pallet_dkg_metadata::Config for Runtime {
 	type DKGId = DKGId;
+	type DKGAuthorityToMerkleLeaf = pallet_dkg_proposals::DKGEcdsaToEthereumAddress;
 	type RuntimeEvent = RuntimeEvent;
 	type OnAuthoritySetChangeHandler = DKGProposals;
 	type OnDKGPublicKeyChangeHandler = ();

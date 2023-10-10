@@ -6777,6 +6777,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "hex",
+ "k256 0.11.6",
  "libsecp256k1",
  "log",
  "pallet-session",
