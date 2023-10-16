@@ -144,6 +144,13 @@ use weights::WeightInfo;
 // Reputation assigned to genesis authorities
 pub const INITIAL_REPUTATION: u32 = 1_000_000_000;
 
+// Our goal is to trigger the ShouldExecuteNewKeygen to true if we have passed exactly X blocks from
+// the last session rotation and still have not seen a new key, this value cannot be too small
+// either because we need to accomodate delays between `keygen process starting + completion +
+// posted onchain`. If the delay is smaller than the above then we might inadvertently rotate
+// sessions.
+pub const BLOCKS_TO_WAIT_BEFORE_KEYGEN_RETRY_TRIGGER: u32 = 20;
+
 // Reputation increase awarded to authorities on submission of next public key
 pub const REPUTATION_INCREMENT: u32 = INITIAL_REPUTATION / 1000;
 
@@ -204,6 +211,13 @@ pub mod pallet {
 			+ Into<ecdsa::Public>
 			+ From<ecdsa::Public>
 			+ MaxEncodedLen;
+		/// Convert DKG AuthorityId to a form that would end up in the Merkle Tree.
+		///
+		/// For instance for ECDSA (secp256k1) we want to store uncompressed public keys (65 bytes)
+		/// and later to Ethereum Addresses (160 bits) to simplify using them on Ethereum chain,
+		/// but the rest of the Substrate codebase is storing them compressed (33 bytes) for
+		/// efficiency reasons.
+		type DKGAuthorityToMerkleLeaf: Convert<Self::DKGId, Vec<u8>>;
 		/// Jail lengths for misbehaviours
 		type KeygenJailSentence: Get<BlockNumberFor<Self>>;
 		type SigningJailSentence: Get<BlockNumberFor<Self>>;
@@ -403,12 +417,15 @@ pub mod pallet {
 
 			// Our goal is to trigger the ShouldExecuteNewKeygen if either of the two conditions are
 			// true : 1. A SessionPeriod of blocks have passed from the LastSessionRotationBlock
-			// 2. If 1 is true and we have not yet seen NextKey on chain for the last 10 blocks
-			// check if we have passed exactly `Period` blocks from the last session rotation
+			// 2. If 1 is true and we have not yet seen NextKey on chain for the last
+			// BLOCKS_TO_WAIT_BEFORE_KEYGEN_RETRY_TRIGGER blocks check if we have passed exactly
+			// `Period` blocks from the last session rotation
 			let blocks_passed_since_last_session_rotation =
 				n - LastSessionRotationBlock::<T>::get();
 			if blocks_passed_since_last_session_rotation >= T::SessionPeriod::get() &&
-				blocks_passed_since_last_session_rotation % 10u32.into() == 0u32.into()
+				blocks_passed_since_last_session_rotation %
+					BLOCKS_TO_WAIT_BEFORE_KEYGEN_RETRY_TRIGGER.into() ==
+					0u32.into()
 			{
 				// lets set the ShouldStartDKG to true
 				// we dont set force_keygen to true, that is reserved for emergency rotate
@@ -1630,7 +1647,7 @@ impl<T: Config> Pallet<T> {
 		// Hash the external accounts into 32 byte chunks to form the base layer of the merkle tree
 		let mut base_layer: Vec<[u8; 32]> = voters
 			.iter()
-			.map(|account| account.to_raw_vec())
+			.map(|account| T::DKGAuthorityToMerkleLeaf::convert(account.clone()))
 			.map(|account| keccak_256(&account))
 			.collect();
 		// Pad base_layer to have length 2^height

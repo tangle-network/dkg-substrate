@@ -168,6 +168,7 @@ parameter_types! {
 
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
+	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereumAddress;
 	type RuntimeEvent = RuntimeEvent;
 	type OnAuthoritySetChangeHandler = DKGProposals;
 	type OnDKGPublicKeyChangeHandler = ();
