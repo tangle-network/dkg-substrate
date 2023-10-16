@@ -1375,7 +1375,10 @@ pub mod pallet {
 			// to sign our own key as a means of jumpstarting the mechanism.
 			if let Some(pub_key) = next_pub_key {
 				ShouldSubmitProposerVote::<T>::put(true);
-				let next_nonce = Self::refresh_nonce() + 1u32;
+				// we use the current nonce as the next nonce since the refreshNonce
+				// has been incremented in `change_authorities` incrementing here will lead to a
+				// difference of two
+				let next_nonce = Self::refresh_nonce();
 				let data = Self::create_refresh_proposal(pub_key.1.into(), next_nonce)?;
 				match T::ProposalHandler::handle_unsigned_proposal(data) {
 					Ok(()) => {
