@@ -216,6 +216,8 @@ pub enum DKGError {
 	InvalidSigningSet,
 	InputOutOfBounds,
 	CannotSign,
+	LocalKeyNotFound,
+	StoringLocalKeyFailed
 }
 
 impl fmt::Display for DKGError {
@@ -242,6 +244,8 @@ impl fmt::Display for DKGError {
 			InvalidSigningSet => "Invalid Signing Set!".to_string(),
 			InputOutOfBounds => "Input value out of bounds set by runtime".to_string(),
 			CannotSign => "Could not sign public key".to_string(),
+			LocalKeyNotFound => "Local key not found!".to_string(),
+			StoringLocalKeyFailed  => "Local key not be saved!".to_string(),
 		};
 		write!(f, "DKGError of type {label}")
 	}

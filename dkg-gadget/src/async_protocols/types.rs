@@ -4,6 +4,7 @@ use curv::elliptic::curves::Secp256k1;
 use dkg_runtime_primitives::{SessionId, StoredUnsignedProposalBatch};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 use serde::{Deserialize, Serialize};
+use sqlx::{FromRow, Sqlite};
 use std::fmt::{Debug, Formatter};
 use wsts::{
 	common::{PolyCommitment, Signature},
@@ -17,7 +18,6 @@ pub enum LocalKeyType {
 	ECDSA(LocalKey<Secp256k1>),
 	FROST(Vec<PolyCommitment>, PartyState),
 }
-
 impl Debug for LocalKeyType {
 	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
 		match self {

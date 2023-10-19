@@ -213,6 +213,7 @@ bytes = { version = "1.4.0", default-features = false }
 bincode2 = { version = "2.0.1", default-features = false }
 structopt = { version = "0.3.26", default-features = false }
 hash-db = { version = "0.16.0", default-features = false }
+sqlx = { version = "0.7.1", default-features = false, features = ["macros"] }
 
 [profile.release]
 panic = 'unwind'

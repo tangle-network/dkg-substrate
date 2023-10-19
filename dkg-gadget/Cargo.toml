@@ -58,7 +58,8 @@ itertools = { workspace = true }
 sync_wrapper = { workspace = true }
 async-stream = { workspace = true }
 lazy_static = { workspace = true }
-
+log = { workspace = true }
+sqlx = { workspace = true, features = ["runtime-tokio-native-tls", "sqlite", "json"] }
 hash-db = { workspace = true, optional = true }
 webb-proposals = { workspace = true }
 
