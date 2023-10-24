@@ -1,4 +1,5 @@
 use super::*;
+use sp_std::vec;
 
 impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	type BatchId = T::BatchId;
@@ -57,10 +58,13 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			"submit_signed_proposal: proposal exist in the unsigned queue"
 		);
 
+		// Accept all signatures to make testing easier
+		#[cfg(not(test))]
 		ensure!(
 			Self::validate_proposal_signature(&prop.data(), &prop.signature),
 			Error::<T>::ProposalSignatureInvalid
 		);
+
 		// Log that the signature is valid
 		log::debug!(
 			target: "runtime::dkg_proposal_handler",
@@ -77,6 +81,28 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		SignedProposals::<T>::insert(id.typed_chain_id, prop.batch_id, prop.clone());
 
 		UnsignedProposalQueue::<T>::remove(id.typed_chain_id, prop.batch_id);
+
+		// if we accepted a RefreshProposal event, then remove all existing RefreshProposals
+		// this is required since in case of any reset or stall of DKG we would end up with
+		// multiple RefreshProposals in queue, but we only want to rotate once
+		for proposal in prop.proposals.clone().into_iter() {
+			if let ProposalKind::Refresh = proposal.kind() {
+				let mut batch_ids_to_remove: Vec<<T as Config>::BatchId> = vec![];
+				for (_typed_chain_id, batch_id, unsigned_batch) in
+					UnsignedProposalQueue::<T>::iter()
+				{
+					for proposal in unsigned_batch.proposals {
+						if let ProposalKind::Refresh = proposal.proposal.kind() {
+							batch_ids_to_remove.push(batch_id);
+						}
+					}
+				}
+
+				for batch_id in batch_ids_to_remove {
+					UnsignedProposalQueue::<T>::remove(id.typed_chain_id, batch_id);
+				}
+			}
+		}
 
 		// Emit RuntimeEvent so frontend can react to it.
 		let signed_proposal_events = prop

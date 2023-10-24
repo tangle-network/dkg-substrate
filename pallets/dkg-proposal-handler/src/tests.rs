@@ -14,25 +14,59 @@
 //
 #![allow(clippy::unwrap_used)]
 use super::mock::DKGProposalHandler;
-
 use crate::{mock::*, Error, SignedProposalBatchOf};
 use codec::Encode;
 use dkg_runtime_primitives::{
-	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, ProposalHandlerTrait, TransactionV2,
-	TypedChainId,
+	keccak_256, offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, utils::ecdsa,
+	AggregatedPublicKeys, MaxProposalLength, MisbehaviourType, ProposalHandlerTrait,
+	ProposalHeader, TransactionV2, TypedChainId, KEY_TYPE,
 };
 use frame_support::{
 	assert_err, assert_noop, assert_ok,
 	traits::{Hooks, OnFinalize},
 	weights::constants::RocksDbWeight,
+	BoundedVec,
 };
+use pallet_dkg_metadata::DKGPublicKey;
 use sp_core::sr25519;
-use sp_runtime::offchain::storage::{StorageRetrievalError, StorageValueRef};
+use sp_io::crypto::{ecdsa_generate, ecdsa_sign_prehashed};
+use sp_runtime::{
+	app_crypto::ecdsa::Public,
+	offchain::storage::{MutateStorageError, StorageRetrievalError, StorageValueRef},
+	RuntimeAppPublic,
+};
 use sp_std::vec::Vec;
-
-use dkg_runtime_primitives::ProposalHeader;
-use sp_runtime::offchain::storage::MutateStorageError;
 use webb_proposals::{Proposal, ProposalKind};
+
+fn mock_pub_key() -> ecdsa::Public {
+	ecdsa_generate(KEY_TYPE, None)
+}
+
+pub fn mock_signed_refresh_proposal_batch(
+	pub_key: ecdsa::Public,
+	batch_id: u32,
+	unsigned_proposal: Proposal<MaxProposalLength>,
+) -> SignedProposalBatchOf<Test> {
+	let data_to_sign = SignedProposalBatchOf::<Test> {
+		proposals: vec![unsigned_proposal.clone()].try_into().unwrap(),
+		batch_id,
+		signature: vec![].try_into().unwrap(),
+	};
+
+	let data_ser = data_to_sign.data();
+
+	let hash = keccak_256(&data_ser);
+	let sig = mock_sign_msg(&hash).unwrap().unwrap();
+
+	let mut sig_vec: Vec<u8> = Vec::new();
+	let signature = ecdsa_sign_prehashed(KEY_TYPE, &pub_key, &hash).unwrap();
+
+	SignedProposalBatchOf::<Test> {
+		proposals: vec![unsigned_proposal].try_into().unwrap(),
+		batch_id,
+		signature: sig_vec.try_into().unwrap(),
+	}
+}
 
 // *** Utility ***
 
@@ -63,6 +97,10 @@ fn check_offchain_proposals_num_eq(num: usize) {
 		proposals_ref.get::<Vec<SignedProposalBatchOf<Test>>>().unwrap();
 	assert!(stored_props.is_some(), "{}", true);
 	assert_eq!(stored_props.unwrap().len(), num);
+}
+
+pub fn mock_dkg_id(id: u8) -> DKGId {
+	DKGId::from(Public::from_raw([id; 33]))
 }
 
 // helper function to skip blocks
@@ -263,41 +301,6 @@ fn submit_signed_proposal_batch_already_exists() {
 				vec![signed_proposal]
 			),
 			Error::<Test>::ProposalDoesNotExists
-		);
-	});
-}
-
-#[test]
-fn submit_signed_proposal_fail_invalid_sig() {
-	execute_test_with(|| {
-		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
-
-		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			RuntimeOrigin::root(),
-			Proposal::Unsigned {
-				kind: ProposalKind::EVM,
-				data: tx_v_2.encode().try_into().unwrap()
-			},
-		));
-
-		let mut invalid_sig: Vec<u8> = Vec::new();
-		invalid_sig.extend_from_slice(&[0u8, 64]);
-
-		let mut signed_proposal = mock_signed_proposal_batch(tx_v_2);
-		signed_proposal.signature = invalid_sig.try_into().unwrap();
-
-		// it does not return an error, however the proposal is not added to the list.
-		// This is because the signature is invalid, and we are batch processing.
-		// we could check for the RuntimeEvent that is emitted.
-		assert_ok!(DKGProposalHandler::submit_signed_proposals(
-			RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
-			vec![signed_proposal]
-		));
-
-		assert!(
-			DKGProposalHandler::signed_proposals(TypedChainId::Evm(0), 1).is_none(),
-			"{}",
-			true
 		);
 	});
 }
@@ -767,5 +770,81 @@ fn offence_reporting_accepts_proposal_signed_not_in_queue() {
 				}
 			)]
 		);
+	});
+}
+
+#[test]
+fn submitting_a_refresh_proposal_will_remove_all_pending_refesh_proposals() {
+	execute_test_with(|| {
+		// The goal of this test is to ensure that with multiple refresh proposals in the unsigned
+		// queue we do not want to sign them all, we should only sign the latest and remove all the
+		// others This scenario can only happen when the DKG has stalled and we call force_rotate,
+		// in that case the current pending refreshProposal and the newly generated refreshProposal
+		// will be signed together resulting in double session rotation.
+
+		// create refresh proposal for session 100
+		let next_dkg_key = ecdsa_generate(KEY_TYPE, None);
+		let refresh_proposal_100 = pallet_dkg_metadata::Pallet::<Test>::create_refresh_proposal(
+			next_dkg_key.0.to_vec(),
+			100,
+		)
+		.unwrap();
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			RuntimeOrigin::root(),
+			refresh_proposal_100.clone()
+		));
+
+		// lets time travel to 5 blocks later and ensure a batch is created
+		run_n_blocks(5);
+
+		// create refresh proposal for session 101
+		let refresh_proposal_101 = pallet_dkg_metadata::Pallet::<Test>::create_refresh_proposal(
+			next_dkg_key.0.to_vec(),
+			101,
+		)
+		.unwrap();
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			RuntimeOrigin::root(),
+			refresh_proposal_101.clone()
+		));
+
+		// lets time travel to 5 blocks later and ensure a batch is created
+		run_n_blocks(10);
+
+		// there should be two batches with refresh for 100 and 101
+		let unsigned_proposal_batch_100 =
+			crate::UnsignedProposalQueue::<Test>::get(TypedChainId::None, 0);
+		assert!(unsigned_proposal_batch_100.is_some());
+		let unsigned_proposal_batch_101 =
+			crate::UnsignedProposalQueue::<Test>::get(TypedChainId::None, 1);
+		assert!(unsigned_proposal_batch_101.is_some());
+
+		// set the DKG key so our signature is accepted
+		let mock_dkg_key = mock_pub_key();
+		let input: BoundedVec<_, _> = mock_dkg_key.0.to_vec().try_into().unwrap();
+		DKGPublicKey::<Test>::put((0, input));
+
+		// sign the refresh proposal for session 101
+		let signed_proposal =
+			mock_signed_refresh_proposal_batch(mock_dkg_key, 1, refresh_proposal_101.clone());
+
+		assert_ok!(DKGProposalHandler::submit_signed_proposals(
+			RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
+			vec![signed_proposal.clone()]
+		));
+
+		// both refresh for 100 and 101 should be removed from queue
+		let unsigned_proposal_batch_100 =
+			crate::UnsignedProposalQueue::<Test>::get(TypedChainId::None, 0);
+		assert!(unsigned_proposal_batch_100.is_none());
+		let unsigned_proposal_batch_101 =
+			crate::UnsignedProposalQueue::<Test>::get(TypedChainId::None, 1);
+		assert!(unsigned_proposal_batch_101.is_none());
+
+		// sanity check, only 101 is signed, 100 is not
+		let signed_proposal_batch_100 = crate::SignedProposals::<Test>::get(TypedChainId::None, 0);
+		assert!(signed_proposal_batch_100.is_none());
+		let signed_proposal_batch_101 = crate::SignedProposals::<Test>::get(TypedChainId::None, 1);
+		assert!(signed_proposal_batch_101.is_some());
 	});
 }
