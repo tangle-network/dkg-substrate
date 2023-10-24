@@ -82,7 +82,7 @@ impl SqlBackend {
 	fn connect_options(config: &BackendConfig) -> Result<SqliteConnectOptions, Error> {
 		match config {
 			BackendConfig::Sqlite(config) => {
-				log::info!(target: "frontier-sql", "📑 Connection configuration: {config:?}");
+				log::info!(target: "dkg-gadget", "📑 Connection configuration: {config:?}");
 				let config = sqlx::sqlite::SqliteConnectOptions::from_str(config.path)?
 					.create_if_missing(config.create_if_missing)
 					// https://www.sqlite.org/pragma.html#pragma_busy_timeout
@@ -138,10 +138,7 @@ impl SqlBackend {
 	}
 
 	async fn get_local_key(&self, session_id: SessionId) -> Result<Option<LocalKeyType>, DKGError> {
-		log::info!(
-			"{}",
-			format!("Offchain Storage : Fetching local keys for session {session_id:?}")
-		);
+		log::info!("{}", format!("SQL Storage : Fetching local keys for session {session_id:?}"));
 		let session_id: i64 = session_id as i64;
 		match sqlx::query("SELECT local_key FROM dkg_keys WHERE session_id = ?")
 			.bind(session_id)
@@ -171,8 +168,8 @@ impl SqlBackend {
 		log::info!(
 			"{}",
 			format!(
-			"Offchain Storage : Store local keys for session {session_id:?}, Key : {local_key:?}"
-		)
+				"SQL Storage : Store local keys for session {session_id:?}, Key : {local_key:?}"
+			)
 		);
 		let session_id: i64 = session_id as i64;
 		let mut tx = self.pool().begin().await.map_err(|_| DKGError::StoringLocalKeyFailed)?;
@@ -183,8 +180,6 @@ impl SqlBackend {
 			.execute(&mut *tx)
 			.await
 			.map_err(|_| DKGError::StoringLocalKeyFailed)?;
-
-		log::debug!(target: "frontier-sql", "[Metadata] Ready to commit");
 		tx.commit().await.map_err(|_| DKGError::StoringLocalKeyFailed)
 	}
 }
