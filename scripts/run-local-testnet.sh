@@ -46,28 +46,28 @@ echo "*** Start Webb DKG Node ***"
 # Alice
 ./target/release/dkg-standalone-node --tmp --chain local --validator -lerror --alice --output-path=./tmp/alice/output.log \
   --rpc-cors all --rpc-external --rpc-methods=unsafe \
-  --port 30333 \
+  --port 30333 --db-path=./tmp/alice/db \
   --rpc-port 9944 --node-key 0000000000000000000000000000000000000000000000000000000000000001 &
 # Bob
 ./target/release/dkg-standalone-node --tmp --chain local --validator -lerror --bob --output-path=./tmp/bob/output.log \
   --rpc-cors all --rpc-external --rpc-methods=unsafe \
-  --port 30305 \
+  --port 30305 --db-path=./tmp/bob/db \
   --rpc-port 9945 --bootnodes /ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp &
 # Charlie
 ./target/release/dkg-standalone-node --tmp --chain local --validator -lerror --charlie --output-path=./tmp/charlie/output.log \
   --rpc-cors all --rpc-external --rpc-methods=unsafe \
-  --port 30308 \
+  --port 30308 --db-path=./tmp/charlie/db \
   --rpc-port 9946 --bootnodes /ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp &
 # Dave
 ./target/release/dkg-standalone-node --tmp --chain local --validator -lerror --dave --output-path=./tmp/dave/output.log \
   --rpc-cors all --rpc-external --rpc-methods=unsafe \
-  --port 30309 \
+  --port 30309 --db-path=./tmp/dave/db \
   --rpc-port 9947 --bootnodes /ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp &
 # Eve
 ./target/release/dkg-standalone-node --tmp --chain local --validator -linfo --eve --output-path=./tmp/eve/output.log \
     --rpc-cors all --rpc-external \
     --rpc-port 9948 \
-    --port 30310 \
+    --port 30310 --db-path=./tmp/eve/db \
     -ldkg=debug \
     -ldkg_gadget::worker=debug \
     -lruntime::dkg_metadata=debug \

@@ -21,6 +21,8 @@ pub struct Cli {
 	pub subcommand: Option<Subcommand>,
 	#[clap(flatten)]
 	pub run: RunCmd,
+	#[arg(long, short = 'd')]
+	pub db_path: std::path::PathBuf,
 	#[arg(long, short = 'o')]
 	pub output_path: Option<std::path::PathBuf>,
 	#[clap(flatten)]

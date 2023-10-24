@@ -49,8 +49,17 @@ pub struct SqlBackend {
 }
 
 impl SqlBackend {
+	pub fn new(
+		config: BackendConfig<'_>,
+		pool_size: u32,
+		num_ops_timeout: Option<NonZeroU32>,
+	) -> Result<Self, Error> {
+		futures::executor::block_on(async {
+			Self::new_inner(config, pool_size, num_ops_timeout).await
+		})
+	}
 	/// Creates a new instance of the SQL backend.
-	pub async fn new(
+	pub async fn new_inner(
 		config: BackendConfig<'_>,
 		pool_size: u32,
 		num_ops_timeout: Option<NonZeroU32>,
@@ -177,5 +186,19 @@ impl SqlBackend {
 
 		log::debug!(target: "frontier-sql", "[Metadata] Ready to commit");
 		tx.commit().await.map_err(|_| DKGError::StoringLocalKeyFailed)
+	}
+}
+
+impl super::DKGDbBackend for SqlBackend {
+	fn get_local_key(&self, session_id: SessionId) -> Result<Option<LocalKeyType>, DKGError> {
+		futures::executor::block_on(async { self.get_local_key(session_id).await })
+	}
+
+	fn store_local_key(
+		&self,
+		session_id: SessionId,
+		local_key: LocalKeyType,
+	) -> Result<(), DKGError> {
+		futures::executor::block_on(async { self.store_local_key(session_id, local_key).await })
 	}
 }
