@@ -140,7 +140,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	spec_name: create_runtime_str!("dkg-standalone-node"),
 	impl_name: create_runtime_str!("dkg-standalone-node"),
 	authoring_version: 1,
-	spec_version: 19,
+	spec_version: 20,
 	impl_version: 0,
 	apis: RUNTIME_API_VERSIONS,
 	transaction_version: 1,
@@ -300,7 +300,7 @@ parameter_types! {
 #[cfg(not(feature = "integration-tests"))]
 parameter_types! {
   // How often we trigger a new session.
-  pub const Period: BlockNumber = HOURS;
+  pub const Period: BlockNumber = MINUTES;
   pub const Offset: BlockNumber = 0;
 }
 
@@ -607,6 +607,7 @@ parameter_types! {
 
 impl pallet_dkg_metadata::Config for Runtime {
 	type DKGId = DKGId;
+	type DKGAuthorityToMerkleLeaf = pallet_dkg_proposals::DKGEcdsaToEthereumAddress;
 	type RuntimeEvent = RuntimeEvent;
 	type OnAuthoritySetChangeHandler = DKGProposals;
 	type OnDKGPublicKeyChangeHandler = ();

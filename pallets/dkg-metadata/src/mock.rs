@@ -29,8 +29,8 @@ use sp_runtime::{
 	impl_opaque_keys,
 	testing::TestXt,
 	traits::{
-		BlakeTwo256, ConvertInto, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup,
-		OpaqueKeys, Verify,
+		BlakeTwo256, Convert, ConvertInto, Extrinsic as ExtrinsicT, IdentifyAccount,
+		IdentityLookup, OpaqueKeys, Verify,
 	},
 	BuildStorage, Percent, Permill,
 };
@@ -141,6 +141,7 @@ parameter_types! {
 
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
+	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereumAddress;
 	type RuntimeEvent = RuntimeEvent;
 	type OnAuthoritySetChangeHandler = ();
 	type OnDKGPublicKeyChangeHandler = ();
@@ -253,4 +254,24 @@ pub fn new_test_ext_raw_authorities(authorities: Vec<(AccountId, DKGId)>) -> Tes
 	ext.execute_with(|| System::set_block_number(1));
 	ext.register_extension(KeystoreExt(Arc::new(MemoryKeystore::new()) as KeystorePtr));
 	ext
+}
+
+/// Convert DKG secp256k1 public keys into Ethereum addresses
+pub struct DKGEcdsaToEthereumAddress;
+impl Convert<dkg_runtime_primitives::crypto::AuthorityId, Vec<u8>> for DKGEcdsaToEthereumAddress {
+	fn convert(a: dkg_runtime_primitives::crypto::AuthorityId) -> Vec<u8> {
+		use k256::{ecdsa::VerifyingKey, elliptic_curve::sec1::ToEncodedPoint};
+		let _x = VerifyingKey::from_sec1_bytes(sp_core::crypto::ByteArray::as_slice(&a));
+		VerifyingKey::from_sec1_bytes(sp_core::crypto::ByteArray::as_slice(&a))
+			.map(|pub_key| {
+				// uncompress the key
+				let uncompressed = pub_key.to_encoded_point(false);
+				// convert to ETH address
+				sp_io::hashing::keccak_256(&uncompressed.as_bytes()[1..])[12..].to_vec()
+			})
+			.map_err(|_| {
+				log::error!(target: "runtime::dkg_proposals", "Invalid DKG PublicKey format!");
+			})
+			.unwrap_or_default()
+	}
 }

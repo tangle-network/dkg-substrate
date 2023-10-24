@@ -348,6 +348,7 @@ declare module '@polkadot/types/lookup' {
       readonly nonce: u32;
       readonly pubKey: Bytes;
       readonly signature: Bytes;
+      readonly compressedPubKey: Bytes;
     } & Struct;
     readonly isPublicKeyChanged: boolean;
     readonly asPublicKeyChanged: {
@@ -361,6 +362,7 @@ declare module '@polkadot/types/lookup' {
       readonly nonce: u32;
       readonly pubKey: Bytes;
       readonly signature: Bytes;
+      readonly compressedPubKey: Bytes;
     } & Struct;
     readonly isMisbehaviourReportsSubmitted: boolean;
     readonly asMisbehaviourReportsSubmitted: {
