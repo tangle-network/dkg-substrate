@@ -1,4 +1,5 @@
 use super::*;
+use sp_std::vec;
 
 impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	type BatchId = T::BatchId;
@@ -87,7 +88,8 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		for proposal in prop.proposals.clone().into_iter() {
 			if let ProposalKind::Refresh = proposal.kind() {
 				let mut batch_ids_to_remove: Vec<<T as Config>::BatchId> = vec![];
-				for (typed_chain_id, batch_id, unsigned_batch) in UnsignedProposalQueue::<T>::iter()
+				for (_typed_chain_id, batch_id, unsigned_batch) in
+					UnsignedProposalQueue::<T>::iter()
 				{
 					for proposal in unsigned_batch.proposals {
 						if let ProposalKind::Refresh = proposal.proposal.kind() {
