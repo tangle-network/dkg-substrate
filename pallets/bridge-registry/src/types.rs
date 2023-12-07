@@ -62,7 +62,7 @@ pub struct BridgeInfo<FieldLimit: Get<u32>> {
 	Clone,
 	Eq,
 	PartialEq,
-	frame_support::RuntimeDebug,
+	sp_runtime::RuntimeDebug,
 	MaxEncodedLen,
 	Encode,
 	TypeInfo,

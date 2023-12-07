@@ -29,7 +29,8 @@ use codec::{Codec, Decode, Encode, MaxEncodedLen};
 use crypto::AuthorityId;
 pub use ethereum::*;
 pub use ethereum_types::*;
-use frame_support::{pallet_prelude::Get, BoundedVec, RuntimeDebug};
+use frame_support::{pallet_prelude::Get, BoundedVec};
+use sp_runtime::RuntimeDebug;
 pub use proposal::*;
 use scale_info::TypeInfo;
 use sp_runtime::{

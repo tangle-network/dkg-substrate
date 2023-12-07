@@ -112,8 +112,8 @@ use dkg_runtime_primitives::{
 	OffchainSignedProposalBatches, ProposalHandlerTrait, ProposalKind, SignedProposalBatch,
 	TypedChainId,
 };
+use sp_runtime::RuntimeDebug;
 use frame_support::{
-	dispatch::fmt::Debug,
 	pallet_prelude::*,
 	traits::{ValidatorSet, ValidatorSetWithIdentification},
 };
@@ -136,6 +136,8 @@ use sp_staking::{
 };
 use sp_std::{convert::TryInto, vec::Vec};
 use webb_proposals::Proposal;
+use core::fmt::Debug;
+
 pub use weights::WeightInfo;
 
 mod impls;
@@ -687,14 +689,14 @@ pub mod pallet {
 				Call::submit_signed_proposals { .. }
 			};
 			if !is_valid_call {
-				frame_support::log::warn!(
+				log::warn!(
 					target: "runtime::dkg_metadata",
 					"validate unsigned: invalid call: {:?}",
 					call,
 				);
 				InvalidTransaction::Call.into()
 			} else {
-				frame_support::log::debug!(
+				log::debug!(
 					target: "runtime::dkg_metadata",
 					"validate unsigned: valid call: {:?}",
 					call,

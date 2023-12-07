@@ -110,6 +110,7 @@ use frame_system::pallet_prelude::BlockNumberFor;
 use sp_runtime::{traits::Convert, RuntimeAppPublic};
 use sp_std::prelude::*;
 use types::{ProposalStatus, ProposalVotes};
+use core::fmt::Debug;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
@@ -131,7 +132,7 @@ pub mod pallet {
 		ProposalNonce,
 	};
 	use frame_support::{
-		dispatch::{fmt::Debug, DispatchResultWithPostInfo},
+		dispatch::{DispatchResultWithPostInfo},
 		pallet_prelude::*,
 	};
 	use frame_system::pallet_prelude::*;

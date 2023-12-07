@@ -14,8 +14,9 @@
 //
 use frame_support::{
 	pallet_prelude::{ConstU32, Get},
-	BoundedVec, RuntimeDebug,
+	BoundedVec,
 };
+use sp_runtime::RuntimeDebug;
 use sp_std::hash::{Hash, Hasher};
 
 use codec::{Decode, Encode, EncodeLike, MaxEncodedLen};
