@@ -17,11 +17,11 @@ sp-keystore = { workspace = true }
 sc-keystore = { workspace = true }
 
 # Relayer
-webb-relayer = { git = "https://github.com/webb-tools/relayer", tag = "v0.5.12-dev" }
-webb-relayer-context = { git = "https://github.com/webb-tools/relayer", tag = "v0.5.12-dev" }
-webb-relayer-config = { git = "https://github.com/webb-tools/relayer", tag = "v0.5.12-dev" }
-webb-relayer-store = { git = "https://github.com/webb-tools/relayer", tag = "v0.5.12-dev" }
-webb-relayer-types = { git = "https://github.com/webb-tools/relayer", tag = "v0.5.12-dev" }
+webb-relayer = { git = "https://github.com/webb-tools/relayer", tag = "v0.5.13-dev" }
+webb-relayer-context = { git = "https://github.com/webb-tools/relayer", tag = "v0.5.13-dev" }
+webb-relayer-config = { git = "https://github.com/webb-tools/relayer", tag = "v0.5.13-dev" }
+webb-relayer-store = { git = "https://github.com/webb-tools/relayer", tag = "v0.5.13-dev" }
+webb-relayer-types = { git = "https://github.com/webb-tools/relayer", tag = "v0.5.13-dev" }
 
 # DKG
 dkg-runtime-primitives = { workspace = true }
