@@ -1,5 +1,5 @@
 use crate::{
-	async_protocols::{remote::AsyncProtocolRemote, KeygenPartyId},
+	async_protocols::{remote::AsyncProtocolRemote, BatchKey, KeygenPartyId},
 	gossip_engine::GossipEngineIface,
 	utils::SendFuture,
 	worker::{DKGWorker, ProtoStageType},
@@ -34,7 +34,16 @@ pub enum KeygenProtocolSetupParameters<B: Block> {
 		stage: ProtoStageType,
 		keygen_protocol_hash: [u8; 32],
 	},
-	WTFrost {},
+	WTFrost {
+		authority_id: AuthorityId,
+		best_authorities: Vec<(KeygenPartyId, Public)>,
+		authority_public_key: Public,
+		keygen_protocol_hash: [u8; 32],
+		threshold: u32,
+		session_id: SessionId,
+		associated_block: NumberFor<B>,
+		stage: ProtoStageType,
+	},
 }
 
 /// Setup parameters for the Signing protocol
@@ -55,9 +64,23 @@ pub enum SigningProtocolSetupParameters<B: Block> {
 		signing_set: Vec<KeygenPartyId>,
 		associated_block_id: NumberFor<B>,
 		ssid: SSID,
-		unsigned_proposal_hash: [u8; 32],
 	},
-	WTFrost {},
+	WTFrost {
+		authority_id: AuthorityId,
+		unsigned_proposal_hash: [u8; 32],
+		unsigned_proposal_batch: StoredUnsignedProposalBatch<
+			BatchId,
+			MaxProposalLength,
+			MaxProposalsInBatch,
+			NumberFor<B>,
+		>,
+		threshold: u32,
+		session_id: SessionId,
+		batch_key: BatchKey,
+		associated_block: NumberFor<B>,
+		stage: ProtoStageType,
+		ssid: SSID,
+	},
 }
 
 /// A type which is used directly by the Job Manager to initialize and manage the DKG protocol
@@ -97,7 +120,10 @@ where
 {
 	/// Loads the default DKG modules internally to be available at runtime
 	pub fn initialize(&self, dkg_worker: DKGWorker<B, BE, C, GE>) {
-		*self.dkgs.write() = vec![Arc::new(MpEcdsaDKG { dkg_worker }), Arc::new(WTFrostDKG {})]
+		*self.dkgs.write() = vec![
+			Arc::new(MpEcdsaDKG { dkg_worker: dkg_worker.clone() }),
+			Arc::new(WTFrostDKG { dkg_worker }),
+		]
 	}
 
 	/// Given a set of parameters, returns the keygen protocol initializer which can handle the

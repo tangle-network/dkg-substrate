@@ -1,4 +1,4 @@
-name: checks
+name: Quality Checks
 
 on:
   push:
@@ -12,7 +12,7 @@ env:
 jobs:
   # checks markdown links
   link-check:
-    name: links
+    name: Links
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -25,7 +25,7 @@ jobs:
 
   # ensures proper formatting and clippy lint
   lint-check:
-    name: lint
+    name: Linting
     runs-on: ubuntu-latest
     steps:
       - name: Cancel Previous Runs

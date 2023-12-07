@@ -3,15 +3,14 @@
 
 use std::{collections::BTreeMap, sync::Mutex};
 
-use curv::elliptic::curves::Secp256k1;
+use crate::async_protocols::types::LocalKeyType;
 use dkg_primitives::{types::DKGError, SessionId};
-use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 
 type LockedMap<K, V> = Mutex<BTreeMap<K, V>>;
 
 /// In Memory storage backend for DKG database, this is used for testing purposes.
 pub struct DKGInMemoryDb {
-	local_keys: LockedMap<SessionId, LocalKey<Secp256k1>>,
+	local_keys: LockedMap<SessionId, LocalKeyType>,
 }
 
 impl Default for DKGInMemoryDb {
@@ -29,10 +28,7 @@ impl DKGInMemoryDb {
 }
 
 impl super::DKGDbBackend for DKGInMemoryDb {
-	fn get_local_key(
-		&self,
-		session_id: SessionId,
-	) -> Result<Option<LocalKey<Secp256k1>>, DKGError> {
+	fn get_local_key(&self, session_id: SessionId) -> Result<Option<LocalKeyType>, DKGError> {
 		let lock = self.local_keys.lock().map_err(|e| DKGError::CriticalError {
 			reason: format!("Failed to lock local_keys: {e}"),
 		})?;
@@ -42,7 +38,7 @@ impl super::DKGDbBackend for DKGInMemoryDb {
 	fn store_local_key(
 		&self,
 		session_id: SessionId,
-		local_key: LocalKey<Secp256k1>,
+		local_key: LocalKeyType,
 	) -> Result<(), DKGError> {
 		let mut lock = self.local_keys.lock().map_err(|e| DKGError::CriticalError {
 			reason: format!("Failed to lock local_keys: {e}"),

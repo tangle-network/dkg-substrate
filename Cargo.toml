@@ -59,7 +59,7 @@ serde = { version = "1.0", default-features = false, features = ["derive"] }
 humantime-serde = { version = "1.1.1", default-features = false }
 serde_json = "1.0.59"
 multi-party-ecdsa = { git = "https://github.com/webb-tools/multi-party-ecdsa.git" }
-tokio = { version = "1.28.0", default-features = false, features = ["sync", "macros"] }
+tokio = { version = "1.32.0", default-features = false, features = ["sync", "macros"] }
 tokio-util = { version = "0.7.7", default-features = false, features = ["codec"] }
 tokio-stream = { version = "0.1.8", features = ["sync"] }
 atomic = "0.5.1"

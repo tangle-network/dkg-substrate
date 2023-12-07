@@ -18,7 +18,7 @@ use crate::{
 	mock::*, AggregatedMisbehaviourReports, AggregatedPublicKeys, Authorities,
 	AuthorityReputations, BestAuthorities, Config, Error, Event, JailedKeygenAuthorities,
 	NextAuthorities, NextBestAuthorities, NextKeygenThreshold, NextSignatureThreshold,
-	INITIAL_REPUTATION, REPUTATION_INCREMENT,
+	RefreshNonce, INITIAL_REPUTATION, REPUTATION_INCREMENT,
 };
 use codec::Encode;
 use dkg_runtime_primitives::{keccak_256, utils::ecdsa, MisbehaviourType, KEY_TYPE};
@@ -874,4 +874,38 @@ fn reputation_is_set_correctly() {
 			assert!(rep.1 == (INITIAL_REPUTATION + REPUTATION_INCREMENT).into());
 		}
 	})
+}
+
+#[test]
+fn force_change_authorities_increments_nonce_correctly() {
+	new_test_ext(vec![1, 2, 3, 4, 5]).execute_with(|| {
+		let session_id = 1;
+
+		// prep the next authorities
+		let mut next_authorities: BoundedVec<_, _> = Default::default();
+		let mut next_authorities_raw: Vec<_> = Default::default();
+		for _ in 1..=5 {
+			let authority_id = mock_pub_key();
+			let dkg_id = DKGId::from(authority_id);
+			next_authorities_raw.push(authority_id);
+			next_authorities.try_push(dkg_id).unwrap();
+		}
+
+		let keygen_threshold = 5;
+		let signature_threshold = 3;
+
+		RefreshNonce::<Test>::put(1);
+		let input: BoundedVec<_, _> = mock_pub_key().to_raw_vec().try_into().unwrap();
+		crate::pallet::NextDKGPublicKey::<Test>::put((session_id, input));
+		NextKeygenThreshold::<Test>::put(keygen_threshold);
+		NextSignatureThreshold::<Test>::put(signature_threshold);
+		NextAuthorities::<Test>::put(&next_authorities);
+
+		// force change authorities
+		assert_ok!(DKGMetadata::force_change_authorities(RuntimeOrigin::root(),));
+
+		// the new refresh nonce should only increment by one
+		let expected_refresh_nonce: u32 = 2;
+		assert_eq!(RefreshNonce::<Test>::get(), expected_refresh_nonce);
+	});
 }

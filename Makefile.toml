@@ -18,7 +18,7 @@ args = ["build", "-rp", "dkg-standalone-node", "--features=integration-tests,tes
 [tasks.integration-tests]
 command = "cargo"
 dependencies = ["clean-tmp", "build-test"]
-args = ["run", "--bin", "dkg-integration-tests"]
+args = ["run", "--release", "--bin", "dkg-integration-tests"]
 
 [tasks.alice]
 condition = { files_exist = ["${CARGO_MAKE_WORKING_DIRECTORY}/target/release/dkg-standalone-node"] }

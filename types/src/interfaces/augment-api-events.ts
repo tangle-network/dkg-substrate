@@ -9,6 +9,7 @@ import type { ApiTypes, AugmentedEvent } from '@polkadot/api-base/types';
 import type { Bytes, Null, Option, Result, U8aFixed, Vec, bool, u128, u16, u32, u64 } from '@polkadot/types-codec';
 import type { ITuple } from '@polkadot/types-codec/types';
 import type { AccountId32, H256, Perbill } from '@polkadot/types/interfaces/runtime';
+import { FrameSupportTokensMiscBalanceStatus, DkgRuntimePrimitivesMisbehaviourType, DkgRuntimePrimitivesCryptoPublic, DkgRuntimePrimitivesProposalSignedProposalBatch, DkgRuntimePrimitivesProposalDkgPayloadKey, WebbProposalsHeaderTypedChainId, PalletDkgProposalHandlerSignedProposalEventData, PalletDkgProposalHandlerOffencesDkgMisbehaviorOffenceType, WebbProposalsProposalProposalKind, PalletElectionProviderMultiPhaseElectionCompute, SpNposElectionsElectionScore, PalletElectionProviderMultiPhasePhase, SpConsensusGrandpaAppPublic, PalletImOnlineSr25519AppSr25519Public, PalletStakingExposure, PalletNominationPoolsCommissionChangeRate, PalletNominationPoolsPoolState, PalletStakingForcing, PalletStakingValidatorPrefs, SpRuntimeDispatchError, FrameSupportDispatchDispatchInfo } from '@polkadot/types/lookup';
 
 export type __AugmentedEvent<ApiType extends ApiTypes> = AugmentedEvent<ApiType>;
 
@@ -150,7 +151,7 @@ declare module '@polkadot/api-base/types/events' {
       /**
        * Next public key signature submitted
        **/
-      NextPublicKeySignatureSubmitted: AugmentedEvent<ApiType, [voterMerkleRoot: U8aFixed, sessionLength: u64, voterCount: u32, nonce: u32, pubKey: Bytes, signature: Bytes], { voterMerkleRoot: U8aFixed, sessionLength: u64, voterCount: u32, nonce: u32, pubKey: Bytes, signature: Bytes }>;
+      NextPublicKeySignatureSubmitted: AugmentedEvent<ApiType, [voterMerkleRoot: U8aFixed, sessionLength: u64, voterCount: u32, nonce: u32, pubKey: Bytes, signature: Bytes, compressedPubKey: Bytes], { voterMerkleRoot: U8aFixed, sessionLength: u64, voterCount: u32, nonce: u32, pubKey: Bytes, signature: Bytes, compressedPubKey: Bytes }>;
       /**
        * Next public key submitted
        **/
@@ -178,7 +179,7 @@ declare module '@polkadot/api-base/types/events' {
       /**
        * Current Public Key Signature Changed.
        **/
-      PublicKeySignatureChanged: AugmentedEvent<ApiType, [voterMerkleRoot: U8aFixed, sessionLength: u64, voterCount: u32, nonce: u32, pubKey: Bytes, signature: Bytes], { voterMerkleRoot: U8aFixed, sessionLength: u64, voterCount: u32, nonce: u32, pubKey: Bytes, signature: Bytes }>;
+      PublicKeySignatureChanged: AugmentedEvent<ApiType, [voterMerkleRoot: U8aFixed, sessionLength: u64, voterCount: u32, nonce: u32, pubKey: Bytes, signature: Bytes, compressedPubKey: Bytes], { voterMerkleRoot: U8aFixed, sessionLength: u64, voterCount: u32, nonce: u32, pubKey: Bytes, signature: Bytes, compressedPubKey: Bytes }>;
       /**
        * Current public key submitted
        **/

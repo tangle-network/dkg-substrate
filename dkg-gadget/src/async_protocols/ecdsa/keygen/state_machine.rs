@@ -15,7 +15,7 @@
 use crate::{
 	async_protocols::{
 		blockchain_interface::BlockchainInterface, state_machine::StateMachineHandler,
-		AsyncProtocolParameters, ProtocolType,
+		types::LocalKeyType, AsyncProtocolParameters, ProtocolType,
 	},
 	debug_logger::DebugLogger,
 };
@@ -100,7 +100,9 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for Keygen {
 		// gossip the public key at the end, storing it locally first because of causal ordering:
 		// the handler of the gossip public key message will need access to the locally stored
 		// public key. Thus, store the public key first, then, broadcast the message.
-		params.engine.store_public_key(local_key.clone(), session_id)?;
+		params
+			.engine
+			.store_public_key(LocalKeyType::ECDSA(local_key.clone()), session_id)?;
 		params.engine.gossip_public_key(pub_key_msg)?;
 
 		Ok(local_key)

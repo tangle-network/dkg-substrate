@@ -315,6 +315,7 @@ export default {
         nonce: 'u32',
         pubKey: 'Bytes',
         signature: 'Bytes',
+        compressedPubKey: 'Bytes',
       },
       PublicKeyChanged: {
         compressedPubKey: 'Bytes',
@@ -326,6 +327,7 @@ export default {
         nonce: 'u32',
         pubKey: 'Bytes',
         signature: 'Bytes',
+        compressedPubKey: 'Bytes',
       },
       MisbehaviourReportsSubmitted: {
         misbehaviourType: 'DkgRuntimePrimitivesMisbehaviourType',
