@@ -205,7 +205,7 @@ frame-benchmarking-cli = { default-features = false, git = "https://github.com/p
 # build deps
 substrate-wasm-builder = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.1.0", default-features = false }
 substrate-build-script-utils = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.1.0", default-features = false }
-prometheus = { package = "substrate-prometheus-endpoint", default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v1.0.0" }
+prometheus = { package = "substrate-prometheus-endpoint", default-features = false, git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.1.0" }
 
 # utils
 toml = { version = "0.7.2", default-features = false }
