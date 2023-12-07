@@ -39,7 +39,9 @@ pub async fn start_relayer_gadget(relayer_params: WebbRelayerParams) {
 		.expect("failed to post process relayer config");
 
 	let store = create_store(relayer_params.database_path).expect("failed to create relayer store");
-	let ctx = RelayerContext::new(config, store.clone()).expect("failed to build relayer context");
+	let ctx = RelayerContext::new(config, store.clone())
+		.await
+		.expect("failed to build relayer context");
 
 	// Start the web server:
 	service::build_web_services(ctx.clone())

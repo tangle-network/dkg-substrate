@@ -9,7 +9,7 @@ use parking_lot::RwLock;
 use sp_api::{ApiExt, AsTrieBackend, BlockT, StateBackend, *};
 use sp_core::bounded_vec::BoundedVec;
 use sp_runtime::{testing::H256, traits::BlakeTwo256, Permill};
-use sp_state_machine::{backend::Consolidate, *};
+use sp_state_machine::*;
 use sp_trie::HashDBT;
 use std::{collections::HashMap, sync::Arc};
 
@@ -164,8 +164,6 @@ impl sp_state_machine::StorageIterator<BlakeTwo256> for DummyRawIterator {
 impl StateBackend<BlakeTwo256> for DummyStateBackend {
 	type Error = DummyError;
 
-	type Transaction = DummyOverlay;
-
 	type TrieBackendStorage = DummyStateBackend;
 
 	type RawIter = DummyRawIterator;
@@ -217,7 +215,7 @@ impl StateBackend<BlakeTwo256> for DummyStateBackend {
 		&self,
 		_delta: impl Iterator<Item = (&'a [u8], Option<&'a [u8]>)>,
 		_state_version: sp_api::StateVersion,
-	) -> (<BlakeTwo256 as sp_api::Hasher>::Out, Self::Transaction)
+	) -> (<BlakeTwo256 as sp_api::Hasher>::Out, BackendTransaction<BlakeTwo256>)
 	where
 		<BlakeTwo256 as sp_api::Hasher>::Out: Ord,
 	{
@@ -229,7 +227,7 @@ impl StateBackend<BlakeTwo256> for DummyStateBackend {
 		_child_info: &sc_client_api::ChildInfo,
 		_delta: impl Iterator<Item = (&'a [u8], Option<&'a [u8]>)>,
 		_state_version: sp_api::StateVersion,
-	) -> (<BlakeTwo256 as sp_api::Hasher>::Out, bool, Self::Transaction)
+	) -> (<BlakeTwo256 as sp_api::Hasher>::Out, bool, BackendTransaction<BlakeTwo256>)
 	where
 		<BlakeTwo256 as sp_api::Hasher>::Out: Ord,
 	{
@@ -253,8 +251,6 @@ impl StateBackend<BlakeTwo256> for DummyStateBackend {
 }
 
 impl ApiExt<TestBlock> for DummyApi {
-	type StateBackend = DummyStateBackend;
-
 	fn execute_in_transaction<F: FnOnce(&Self) -> sp_api::TransactionOutcome<R>, R>(
 		&self,
 		_call: F,
@@ -308,11 +304,11 @@ impl ApiExt<TestBlock> for DummyApi {
 		todo!()
 	}
 
-	fn into_storage_changes(
+	fn into_storage_changes<B: StateBackend<HashingFor<TestBlock>>>(
 		&self,
-		_backend: &Self::StateBackend,
+		_backend: &B,
 		_parent_hash: <TestBlock as BlockT>::Hash,
-	) -> Result<sp_api::StorageChanges<Self::StateBackend, TestBlock>, String>
+	) -> Result<sp_api::StorageChanges<TestBlock>, String>
 	where
 		Self: Sized,
 	{
@@ -388,14 +384,7 @@ impl hash_db::AsHashDB<BlakeTwo256, Vec<u8>> for DummyOverlay {
 	}
 }
 
-impl Consolidate for DummyOverlay {
-	fn consolidate(&mut self, _: Self) {
-		todo!()
-	}
-}
-
 impl sp_state_machine::TrieBackendStorage<BlakeTwo256> for DummyStateBackend {
-	type Overlay = DummyOverlay;
 	fn get(
 		&self,
 		_: &<BlakeTwo256 as sp_core::Hasher>::Out,
@@ -425,7 +414,7 @@ impl sc_client_api::BlockImportOperation<TestBlock> for DummyStateBackend {
 
 	fn update_db_storage(
 		&mut self,
-		_update: sc_client_api::TransactionForSB<Self::State, TestBlock>,
+		_update: BackendTransaction<HashingFor<TestBlock>>,
 	) -> sp_blockchain::Result<()> {
 		todo!()
 	}
