@@ -24,8 +24,10 @@ use codec::{Decode, Encode, MaxEncodedLen};
 use dkg_runtime_primitives::{
 	MaxAuthorities, MaxKeyLength, MaxProposalLength, MaxReporters, MaxSignatureLength, TypedChainId,
 };
-use frame_election_provider_support::bounds::{ElectionBounds,ElectionBoundsBuilder};
-use frame_election_provider_support::ElectionDataProvider;
+use frame_election_provider_support::{
+	bounds::{ElectionBounds, ElectionBoundsBuilder},
+	ElectionDataProvider,
+};
 
 use frame_election_provider_support::{onchain, SequentialPhragmen, VoteWeight};
 use frame_support::{

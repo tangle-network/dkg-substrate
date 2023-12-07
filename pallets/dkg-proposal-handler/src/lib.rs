@@ -112,12 +112,13 @@ use dkg_runtime_primitives::{
 	OffchainSignedProposalBatches, ProposalHandlerTrait, ProposalKind, SignedProposalBatch,
 	TypedChainId,
 };
-use sp_runtime::RuntimeDebug;
 use frame_support::{
 	pallet_prelude::*,
 	traits::{ValidatorSet, ValidatorSetWithIdentification},
 };
+use sp_runtime::RuntimeDebug;
 
+use core::fmt::Debug;
 use frame_system::{
 	offchain::{AppCrypto, SendSignedTransaction, SignMessage, Signer},
 	pallet_prelude::BlockNumberFor,
@@ -136,7 +137,6 @@ use sp_staking::{
 };
 use sp_std::{convert::TryInto, vec::Vec};
 use webb_proposals::Proposal;
-use core::fmt::Debug;
 
 pub use weights::WeightInfo;
 

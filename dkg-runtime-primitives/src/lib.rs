@@ -30,12 +30,11 @@ use crypto::AuthorityId;
 pub use ethereum::*;
 pub use ethereum_types::*;
 use frame_support::{pallet_prelude::Get, BoundedVec};
-use sp_runtime::RuntimeDebug;
 pub use proposal::*;
 use scale_info::TypeInfo;
 use sp_runtime::{
 	traits::{IdentifyAccount, Verify},
-	MultiSignature,
+	MultiSignature, RuntimeDebug,
 };
 use sp_std::{fmt::Debug, prelude::*, vec::Vec};
 use tiny_keccak::{Hasher, Keccak};

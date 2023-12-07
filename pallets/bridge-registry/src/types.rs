@@ -59,15 +59,7 @@ pub struct BridgeInfo<FieldLimit: Get<u32>> {
 }
 
 #[derive(
-	Clone,
-	Eq,
-	PartialEq,
-	sp_runtime::RuntimeDebug,
-	MaxEncodedLen,
-	Encode,
-	TypeInfo,
-	Decode,
-	Default,
+	Clone, Eq, PartialEq, sp_runtime::RuntimeDebug, MaxEncodedLen, Encode, TypeInfo, Decode, Default,
 )]
 pub struct SerdeData(Data);
 
