@@ -15,14 +15,13 @@
 // construct_runtime requires this
 #![allow(clippy::from_over_into, clippy::unwrap_used)]
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::{
-	construct_runtime, parameter_types, sp_io::TestExternalities, BasicExternalities,
-};
+use frame_support::{construct_runtime, parameter_types, BasicExternalities};
 use frame_system::EnsureRoot;
 use sp_core::{
 	sr25519::{self, Signature},
 	H256,
 };
+use sp_io::TestExternalities;
 use sp_keystore::{testing::MemoryKeystore, KeystoreExt, KeystorePtr};
 use sp_runtime::{
 	app_crypto::ecdsa::Public,

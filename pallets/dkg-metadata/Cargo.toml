@@ -46,6 +46,8 @@ std = [
 	"codec/std",
 	"hex/std",
 	"scale-info/std",
+	"sp-io/std",
+	"sp-runtime/std",
 	"sp-std/std",
 	"log/std",
 	"sp-runtime/std",

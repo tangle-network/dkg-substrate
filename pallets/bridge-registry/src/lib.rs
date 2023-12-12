@@ -50,6 +50,7 @@ mod benchmarking;
 pub mod types;
 
 mod weights;
+use sp_runtime::BoundedVec;
 use weights::WeightInfo;
 
 use types::*;
@@ -57,10 +58,9 @@ use types::*;
 use sp_std::{convert::TryInto, prelude::*, vec};
 
 use frame_support::pallet_prelude::{ensure, DispatchError};
-use sp_runtime::traits::{AtLeast32Bit, One, Zero};
-use webb_proposals::{evm::AnchorUpdateProposal, Proposal, ProposalKind, ResourceId};
-
 pub use pallet::*;
+use sp_runtime::traits::{AtLeast32Bit, One, Zero};
+use webb_proposals::{evm::AnchorUpdateProposal, from_slice, Proposal, ProposalKind, ResourceId};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -256,7 +256,10 @@ impl<T: Config> OnSignedProposal<T::MaxProposalLength> for Pallet<T> {
 			let data = proposal.data();
 			let mut buf = [0u8; AnchorUpdateProposal::LENGTH];
 			buf.clone_from_slice(data.as_slice());
-			let anchor_update_proposal = AnchorUpdateProposal::from(buf);
+			let anchor_update_proposal = from_slice::<AnchorUpdateProposal>(&buf).map_err(|e| {
+				log::error!("Error while decoding proposal: {:?}", e);
+				Error::<T>::VerifyError
+			})?;
 			// Get the source and target resource IDs to check existence of
 			let src_resource_id = anchor_update_proposal.src_resource_id();
 			let dest_resource_id = anchor_update_proposal.header().resource_id();
@@ -283,12 +286,10 @@ impl<T: Config> OnSignedProposal<T::MaxProposalLength> for Pallet<T> {
 					// Assign the bridge index to the destination resource
 					ResourceToBridgeIndex::<T>::insert(dest_resource_id, next_bridge_index);
 					// Create the bridge record
-					let bridge_metadata = BridgeMetadata {
-						info: Default::default(),
-						resource_ids: vec![src_resource_id, dest_resource_id]
-							.try_into()
-							.map_err(|_| Error::<T>::OutOfBounds)?,
-					};
+					let mut resource_ids = BoundedVec::new();
+					resource_ids.try_push(*src_resource_id).map_err(|_| Error::<T>::OutOfBounds)?;
+					resource_ids.try_push(dest_resource_id).map_err(|_| Error::<T>::OutOfBounds)?;
+					let bridge_metadata = BridgeMetadata { info: Default::default(), resource_ids };
 					Bridges::<T>::insert(next_bridge_index, bridge_metadata);
 					// Increment the next bridge index
 					NextBridgeIndex::<T>::mutate(|next_bridge_index| {
@@ -299,14 +300,14 @@ impl<T: Config> OnSignedProposal<T::MaxProposalLength> for Pallet<T> {
 					let (r_id, bridge_index) = if src_bridge_index == T::BridgeIndex::zero() {
 						(src_resource_id, dest_bridge_index)
 					} else {
-						(dest_resource_id, src_bridge_index)
+						(&dest_resource_id, src_bridge_index)
 					};
 					ResourceToBridgeIndex::<T>::insert(r_id, bridge_index);
 					let mut metadata =
 						Bridges::<T>::get(bridge_index).ok_or(Error::<T>::BridgeNotFound)?;
 					metadata
 						.resource_ids
-						.try_push(r_id)
+						.try_push(*r_id)
 						.map_err(|_| Error::<T>::TooManyResources)?;
 					Bridges::<T>::insert(bridge_index, metadata);
 				}

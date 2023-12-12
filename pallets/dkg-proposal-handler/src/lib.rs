@@ -462,7 +462,7 @@ pub mod pallet {
 				let data = prop_batch.data();
 
 				// check the signature is valid
-				let result = ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(
+				let _result = ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(
 					&prop_batch.signature,
 					&data,
 				);

@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 use super::*;
 use crate::mock::*;
-use frame_support::{assert_err, assert_ok, bounded_vec, BoundedVec};
+use frame_support::{assert_err, assert_ok, BoundedVec};
 use std::convert::TryFrom;
 use webb_proposals::{self, evm, FunctionSignature, Nonce, ProposalHeader};
 
@@ -30,9 +30,11 @@ fn should_handle_signed_evm_anchor_update_proposals() {
 			[1u8; 32],
 			src_resource_id,
 		);
+		let data = webb_proposals::to_vec(&proposal).unwrap();
+		let bounded_data = BoundedVec::try_from(data).unwrap();
 		let signed_proposal = Proposal::Signed {
 			kind: ProposalKind::AnchorUpdate,
-			data: proposal.into_bytes().to_vec().try_into().unwrap(),
+			data: bounded_data,
 			signature: vec![].try_into().unwrap(),
 		};
 		// Handle signed proposal
@@ -40,12 +42,11 @@ fn should_handle_signed_evm_anchor_update_proposals() {
 		// Verify the storage system updates correctly
 		assert_eq!(ResourceToBridgeIndex::<Test>::get(target_resource_id), Some(1));
 		assert_eq!(ResourceToBridgeIndex::<Test>::get(src_resource_id), Some(1));
+		let bounded_resource_ids =
+			BoundedVec::try_from(vec![target_resource_id, src_resource_id]).unwrap();
 		assert_eq!(
 			Bridges::<Test>::get(1).unwrap(),
-			BridgeMetadata {
-				resource_ids: bounded_vec![src_resource_id, target_resource_id],
-				info: Default::default()
-			}
+			BridgeMetadata { resource_ids: bounded_resource_ids, info: Default::default() }
 		);
 		assert_eq!(NextBridgeIndex::<Test>::get(), 2);
 	});
@@ -71,9 +72,11 @@ fn should_handle_multiple_signed_evm_anchor_update_proposals() {
 				[1u8; 32],
 				src_resource_id,
 			);
+			let data = webb_proposals::to_vec(&proposal).unwrap();
+			let bounded_data = BoundedVec::try_from(data).unwrap();
 			let signed_proposal = Proposal::Signed {
 				kind: ProposalKind::AnchorUpdate,
-				data: proposal.into_bytes().to_vec().try_into().unwrap(),
+				data: bounded_data,
 				signature: vec![].try_into().unwrap(),
 			};
 			assert_ok!(BridgeRegistry::on_signed_proposal(signed_proposal));
@@ -108,9 +111,11 @@ fn should_fail_to_link_resources_from_different_bridges() {
 				[1u8; 32],
 				target_resource_id,
 			);
+			let data = webb_proposals::to_vec(&src_dummy_proposal).unwrap();
+			let bounded_data = BoundedVec::try_from(data).unwrap();
 			assert_ok!(BridgeRegistry::on_signed_proposal(Proposal::Signed {
 				kind: ProposalKind::AnchorUpdate,
-				data: src_dummy_proposal.into_bytes().to_vec().try_into().unwrap(),
+				data: bounded_data,
 				signature: vec![].try_into().unwrap(),
 			}));
 			assert_eq!(NextBridgeIndex::<Test>::get(), 2);
@@ -127,9 +132,11 @@ fn should_fail_to_link_resources_from_different_bridges() {
 				[1u8; 32],
 				src_resource_id,
 			);
+			let data = webb_proposals::to_vec(&dest_dummy_proposal).unwrap();
+			let bounded_data = BoundedVec::try_from(data).unwrap();
 			assert_ok!(BridgeRegistry::on_signed_proposal(Proposal::Signed {
 				kind: ProposalKind::AnchorUpdate,
-				data: dest_dummy_proposal.into_bytes().to_vec().try_into().unwrap(),
+				data: bounded_data,
 				signature: vec![].try_into().unwrap(),
 			}));
 			assert_eq!(NextBridgeIndex::<Test>::get(), 3);
@@ -141,10 +148,12 @@ fn should_fail_to_link_resources_from_different_bridges() {
 			src_resource_id,
 		);
 
+		let data = webb_proposals::to_vec(&bad_proposal).unwrap();
+		let bounded_data = BoundedVec::try_from(data).unwrap();
 		assert_err!(
 			BridgeRegistry::on_signed_proposal(Proposal::Signed {
 				kind: ProposalKind::AnchorUpdate,
-				data: bad_proposal.into_bytes().to_vec().try_into().unwrap(),
+				data: bounded_data,
 				signature: vec![].try_into().unwrap(),
 			}),
 			Error::<Test>::BridgeIndexError
