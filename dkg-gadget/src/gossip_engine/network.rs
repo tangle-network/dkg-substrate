@@ -406,7 +406,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 				}
 			},
 			SyncEvent::PeerDisconnected(remote) => {
-				self.service.remove_peers_from_reserved_set(
+				let _ = self.service.remove_peers_from_reserved_set(
 					self.protocol_name.clone(),
 					iter::once(remote).collect(),
 				);

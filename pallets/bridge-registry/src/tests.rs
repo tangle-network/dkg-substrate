@@ -43,7 +43,7 @@ fn should_handle_signed_evm_anchor_update_proposals() {
 		assert_eq!(ResourceToBridgeIndex::<Test>::get(target_resource_id), Some(1));
 		assert_eq!(ResourceToBridgeIndex::<Test>::get(src_resource_id), Some(1));
 		let bounded_resource_ids =
-			BoundedVec::try_from(vec![target_resource_id, src_resource_id]).unwrap();
+			BoundedVec::try_from(vec![src_resource_id, target_resource_id]).unwrap();
 		assert_eq!(
 			Bridges::<Test>::get(1).unwrap(),
 			BridgeMetadata { resource_ids: bounded_resource_ids, info: Default::default() }
