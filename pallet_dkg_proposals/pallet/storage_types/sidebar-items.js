@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["ChainNonces","ProposerCount","ProposerThreshold","Proposers","Resources","Votes","VotingKeys"]};

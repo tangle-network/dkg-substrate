@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["KeygenProtocolSetupParameters","SigningProtocolSetupParameters"],"mod":["mp_ecdsa","wt_frost"],"struct":["DKGModules"],"trait":["DKG"],"type":["ProtocolInitReturn"]};

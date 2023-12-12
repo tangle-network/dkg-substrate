@@ -1,0 +1,5 @@
+(function() {var implementors = {
+"dkg_primitives":[],
+"dkg_runtime_primitives":[],
+"pallet_dkg_proposals":[["impl&lt;T: <a class=\"trait\" href=\"pallet_dkg_proposals/pallet/trait.Config.html\" title=\"trait pallet_dkg_proposals::pallet::Config\">Config</a>&gt; OnAuthoritySetChangeHandler&lt;&lt;T as Config&gt;::AccountId, <a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.u64.html\">u64</a>, &lt;T as <a class=\"trait\" href=\"pallet_dkg_proposals/pallet/trait.Config.html\" title=\"trait pallet_dkg_proposals::pallet::Config\">Config</a>&gt;::<a class=\"associatedtype\" href=\"pallet_dkg_proposals/pallet/trait.Config.html#associatedtype.DKGId\" title=\"type pallet_dkg_proposals::pallet::Config::DKGId\">DKGId</a>&gt; for <a class=\"struct\" href=\"pallet_dkg_proposals/pallet/struct.Pallet.html\" title=\"struct pallet_dkg_proposals::pallet::Pallet\">Pallet</a>&lt;T&gt;"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

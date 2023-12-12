@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"dkg_standalone_runtime":[["impl Config&lt;<a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.unit.html\">()</a>&gt; for <a class=\"struct\" href=\"dkg_standalone_runtime/struct.Runtime.html\" title=\"struct dkg_standalone_runtime::Runtime\">Runtime</a>"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

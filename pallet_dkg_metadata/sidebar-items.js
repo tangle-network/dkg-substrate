@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BLOCKS_TO_WAIT_BEFORE_KEYGEN_RETRY_TRIGGER","INITIAL_REPUTATION","REPUTATION_INCREMENT"],"mod":["pallet","types","weights"],"struct":["DKGPeriodicSessions"]};

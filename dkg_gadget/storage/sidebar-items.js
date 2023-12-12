@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["misbehaviour_reports","proposals","public_keys"]};

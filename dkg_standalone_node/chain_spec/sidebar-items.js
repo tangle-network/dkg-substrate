@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["arana_local_config","arana_testnet_config","authority_keys_from_seed","development_config","get_account_id_from_seed","get_from_seed","local_testnet_config"],"type":["ChainSpec"]};

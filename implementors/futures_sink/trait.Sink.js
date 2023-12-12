@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"dkg_mock_blockchain":[["impl&lt;B: <a class=\"trait\" href=\"dkg_mock_blockchain/data_types/trait.BlockTraitForTest.html\" title=\"trait dkg_mock_blockchain::data_types::BlockTraitForTest\">BlockTraitForTest</a>&gt; Sink&lt;<a class=\"enum\" href=\"dkg_mock_blockchain/transport/enum.ProtocolPacket.html\" title=\"enum dkg_mock_blockchain::transport::ProtocolPacket\">ProtocolPacket</a>&lt;B&gt;&gt; for <a class=\"struct\" href=\"dkg_mock_blockchain/transport/struct.WriteHalf.html\" title=\"struct dkg_mock_blockchain::transport::WriteHalf\">WriteHalf</a>&lt;B&gt;"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MILLISECS_PER_BLOCK","MINUTES","SECS_PER_BLOCK"],"struct":["DummyApi","DummyApiInner","DummyError","DummyOverlay","DummyRawIterator","DummyStateBackend","Offset","Period"],"type":["AccountId","ApiResult","BlockNumber","Moment","Reputation"]};

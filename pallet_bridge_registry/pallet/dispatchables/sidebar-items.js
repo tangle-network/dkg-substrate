@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["force_reset_indices","set_metadata"]};

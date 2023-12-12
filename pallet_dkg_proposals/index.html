@@ -1,0 +1,58 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="DKG Proposals Module"><title>pallet_dkg_proposals - Rust</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../static.files/rustdoc-07416f8512e0e04c.css" id="mainThemeStyle"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="pallet_dkg_proposals" data-themes="" data-resource-suffix="" data-rustdoc-version="1.73.0-nightly (4c8bb79d9 2023-07-15)" data-channel="nightly" data-search-js="search-f6292fe389d70017.js" data-settings-js="settings-de11bff964e9d4e5.js" data-settings-css="settings-8c76f75bfb6bd192.css" data-theme-light-css="light-6d2c9675f3d09c26.css" data-theme-dark-css="dark-45ceb8f2e522f4d1.css" data-theme-ayu-css="ayu-fd19013d6ce078bf.css" ><script src="../static.files/storage-db41da1a38ea3cb8.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-0795b7d26be81095.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../static.files/light-6d2c9675f3d09c26.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../static.files/dark-45ceb8f2e522f4d1.css"><link rel="stylesheet" href="../static.files/noscript-cffde32267a19fd6.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="logo-container" href="../pallet_dkg_proposals/index.html"><img class="rust-logo" src="../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><h2></h2></nav><nav class="sidebar"><a class="logo-container" href="../pallet_dkg_proposals/index.html"><img class="rust-logo" src="../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><h2 class="location"><a href="#">Crate pallet_dkg_proposals</a></h2><div class="sidebar-elems"><ul class="block"><li class="version">Version 1.0.0</li><li><a id="all-types" href="all.html">All Items</a></li></ul><section><ul class="block"><li><a href="#modules">Modules</a></li><li><a href="#structs">Structs</a></li></ul></section></div></nav><main><div class="width-limiter"><nav class="sub"><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="main-heading"><h1>Crate <a class="mod" href="#">pallet_dkg_proposals</a><button id="copy-path" title="Copy item path to clipboard"><img src="../static.files/clipboard-7571035ce49a181d.svg" width="19" height="18" alt="Copy item path"></button></h1><span class="out-of-band"><a class="src" href="../src/pallet_dkg_proposals/lib.rs.html#18-794">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="dkg-proposals-module"><a href="#dkg-proposals-module">DKG Proposals Module</a></h2>
+<p>A pallet to manage proposals that are submitted for signing by the DKG.</p>
+<h3 id="overview"><a href="#overview">Overview</a></h3>
+<p>The DKG proposals pallet manages a governance system derived from
+ChainSafe’s ChainBridge Substrate pallet. It is designed as the first
+layer in Webb’s DKG governance system and is responsible for managing
+proposal submission and voting for messages that are intended to be signed
+by the DKG threshold signing protocol.</p>
+<p>The pallet implements a simple threshold voting system wherein proposers
+propose messages to be signed. Once a threshold of votes over the same
+proposal is met, the message is handled by a generic proposal handler.
+This pallet is intended to be used in conjunction with [<code>pallet-dkg-proposal-handler</code>].</p>
+<h4 id="terminology"><a href="#terminology">Terminology</a></h4>
+<ul>
+<li>Proposer: A valid account that can submit and vote on proposals.</li>
+<li>Proposal: A message that is submitted, voted on, and eventually handled or rejected.</li>
+<li>ProposerSet: The merkle root of the smallest merkle tree containing the ordered proposers.</li>
+</ul>
+<h4 id="implementation"><a href="#implementation">Implementation</a></h4>
+<p>The DKG proposal system combines a set of proposers, a generic proposal message,
+and a threshold-voting system to build a simple governance system for “handling”
+proposals. By “handling”, we intend for successful proposals to be sent to
+a secondary system that acts upon proposal data.</p>
+<p>In the Webb Protocol, the handler submits successful proposals to the DKG for signing.</p>
+<p>The proposers of the pallet are derived from the active authorities of the underlying
+chain as well as any account added to the set using the <code>add_proposer</code> call. The
+intention is for the set of proposers to grow larger than simply the authority set
+of the chain without growing the signing set of the underlying DKG.</p>
+<p>Proposers are required to submit 2 types of keys: AccountId keys and ECDSA keys. The former
+keys are used to propose and interact with the Substrate based chain integrating this pallet.
+The latter are used to interoperate with EVM systems who utilize the proposers for auxiliary
+protocols described below. This aligns non-authority proposers with authority proposers as well
+since we expect authorities to have both types of keys registered for consensus and DKG
+activities.</p>
+<p>The proposals of the system are generic and left to be handled by a proposal handler.
+Currently, upon inspection of the <code>pallet-dkg-proposal-handler</code> module, the only valid
+proposal that can be proposed and handled successfully is the Anchor Update proposal:
+the proposal responsible for bridging different anchors together in the Webb Protocol.</p>
+<p>The system can be seen as a 2-stage oracle-like system wherein proposers vote on
+events/messages they believe to be valid and, if successful, the DKG will sign such events.</p>
+<p>The system also supports accumulating proposers for off-chain auxiliary protocols that utilize
+proposers for new activities. In the Webb Protocol, we use the proposers to backstop the system
+against critical failures and provide an emergency fallback mechanism when the DKG fails to sign
+messages. We create a merkle tree of active proposers are submit the merkle root and session
+length to the DKG for signing so as to maintain the list of active proposers across the
+protocol’s execution. If at any point in the future the DKG fails to sign messages and stops
+working, we can utilize this merkle root to allow proposers to vote to restart and transition
+any external system relying on the DKG to a new state.</p>
+<h4 id="rewards"><a href="#rewards">Rewards</a></h4>
+<p>Currently, there are no extra rewards integrated for proposers. This is a future feature.</p>
+<h3 id="related-modules"><a href="#related-modules">Related Modules</a></h3>
+<ul>
+<li><a href="https://github.com/paritytech/substrate/tree/master/frame/system"><code>System</code></a></li>
+<li><a href="https://github.com/paritytech/substrate/tree/master/frame/support"><code>Support</code></a></li>
+<li><a href="../../pallet-dkg-proposal-handler"><code>DKG Proposal Handler</code></a></li>
+</ul>
+</div></details><h2 id="reexports" class="small-section-header"><a href="#reexports">Re-exports</a></h2><ul class="item-table"><li><div class="item-name"><code>pub use <a class="mod" href="pallet/index.html" title="mod pallet_dkg_proposals::pallet">pallet</a>::*;</code></div></li></ul><h2 id="modules" class="small-section-header"><a href="#modules">Modules</a></h2><ul class="item-table"><li><div class="item-name"><a class="mod" href="pallet/index.html" title="mod pallet_dkg_proposals::pallet">pallet</a></div><div class="desc docblock-short">The <code>pallet</code> module in each FRAME pallet hosts the most important items needed
+to construct this pallet.</div></li><li><div class="item-name"><a class="mod" href="types/index.html" title="mod pallet_dkg_proposals::types">types</a></div></li><li><div class="item-name"><a class="mod" href="utils/index.html" title="mod pallet_dkg_proposals::utils">utils</a></div></li></ul><h2 id="structs" class="small-section-header"><a href="#structs">Structs</a></h2><ul class="item-table"><li><div class="item-name"><a class="struct" href="struct.DKGEcdsaToEthereumAddress.html" title="struct pallet_dkg_proposals::DKGEcdsaToEthereumAddress">DKGEcdsaToEthereumAddress</a></div><div class="desc docblock-short">Convert DKG secp256k1 public keys into Ethereum addresses</div></li><li><div class="item-name"><a class="struct" href="struct.WebbWeight.html" title="struct pallet_dkg_proposals::WebbWeight">WebbWeight</a></div><div class="desc docblock-short">Weights for pallet_dkg_proposals using the Substrate node and recommended hardware.</div></li></ul></section></div></main></body></html>

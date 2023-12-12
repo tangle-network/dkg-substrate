@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["acknowledge_proposal","eval_vote_state","reject_proposal","remove_resource","set_resource","set_threshold","whitelist_chain"]};

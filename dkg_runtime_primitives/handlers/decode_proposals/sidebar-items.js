@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["decode_proposal_header","decode_proposal_identifier"],"struct":["ProposalIdentifier"]};

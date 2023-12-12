@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ProtocolPacket"],"fn":["bind_transport"],"struct":["ReadHalf","WriteHalf"],"type":["TransportFramed"]};

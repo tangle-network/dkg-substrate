@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["force_remove_unsigned_proposal_batch","force_submit_unsigned_proposal","submit_dkg_signing_offence","submit_signed_proposals"]};

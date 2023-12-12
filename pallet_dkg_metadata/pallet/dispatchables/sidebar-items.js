@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["force_change_authorities","force_unjail_keygen","force_unjail_signing","set_keygen_threshold","set_signature_threshold","submit_misbehaviour_reports","submit_next_public_key","submit_public_key","trigger_emergency_keygen","unjail"]};

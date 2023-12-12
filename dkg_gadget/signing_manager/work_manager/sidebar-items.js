@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["PollMethod"],"struct":["Job","JobMetadata","WorkManager","WorkManagerInner"],"type":["SyncFuture"]};

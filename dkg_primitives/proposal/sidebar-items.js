@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PROPOSAL_SIGNATURE_LENGTH"],"enum":["DKGPayloadKey","Proposal","ProposalAction","ProposalKind","TypedChainId"],"struct":["DKGSignedPayload","FunctionSignature","OffchainSignedProposalBatches","ProposalHeader","ProposalNonce","RefreshProposal","ResourceId","SignedProposalBatch","StoredUnsignedProposalBatch"],"trait":["ProposalHandlerTrait"]};

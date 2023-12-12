@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"trait":["GetDKGPublicKey","GetProposerSet","OnAuthoritySetChangeHandler","OnDKGPublicKeyChangeHandler","OnSignedProposal"]};

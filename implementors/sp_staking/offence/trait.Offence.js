@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"pallet_dkg_proposal_handler":[["impl&lt;Offender: <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html\" title=\"trait core::clone::Clone\">Clone</a>&gt; Offence&lt;Offender&gt; for <a class=\"struct\" href=\"pallet_dkg_proposal_handler/struct.DKGMisbehaviourOffence.html\" title=\"struct pallet_dkg_proposal_handler::DKGMisbehaviourOffence\">DKGMisbehaviourOffence</a>&lt;Offender&gt;"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

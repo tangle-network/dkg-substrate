@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DKG_DEFAULT_PROPOSER_THRESHOLD"],"enum":["ProposalStatus"],"struct":["ProposalVotes"]};

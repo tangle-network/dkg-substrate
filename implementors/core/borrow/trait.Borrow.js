@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"dkg_gadget":[["impl&lt;B: BlockT&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/borrow/trait.Borrow.html\" title=\"trait core::borrow::Borrow\">Borrow</a>&lt;[<a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.u8.html\">u8</a>; <a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.array.html\">32</a>]&gt; for <a class=\"struct\" href=\"dkg_gadget/signing_manager/work_manager/struct.Job.html\" title=\"struct dkg_gadget::signing_manager::work_manager::Job\">Job</a>&lt;B&gt;"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

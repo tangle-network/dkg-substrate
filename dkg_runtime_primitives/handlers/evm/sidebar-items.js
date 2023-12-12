@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["add_token_to_set","anchor_update","evm_tx","fee_recipient_update","fee_update","max_deposit_limit_update","min_withdrawal_limit_update","refresh","remove_token_from_set","rescue_tokens","resource_id_update","set_treasury_handler","set_verifier"]};

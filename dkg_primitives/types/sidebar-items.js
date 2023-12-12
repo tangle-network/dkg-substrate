@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["DKGError","DKGMsgStatus","DKGResult","NetworkMsgPayload"],"struct":["DKGMessage","KeygenParams","SignParams","SignedDKGMessage"],"trait":["DKGRoundsSM"],"type":["FE","GE","SSID","SessionId"]};

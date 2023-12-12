@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["perform_storing_of_aggregated_public_keys"]};

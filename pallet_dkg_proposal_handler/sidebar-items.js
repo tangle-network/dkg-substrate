@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["DKGMisbehaviorOffenceType"],"mod":["pallet","weights"],"struct":["DKGMisbehaviourOffence"]};

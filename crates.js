@@ -1,0 +1,1 @@
+window.ALL_CRATES = ["dkg_gadget","dkg_integration_tests","dkg_logging","dkg_mock_blockchain","dkg_primitives","dkg_runtime_primitives","dkg_standalone_node","dkg_standalone_runtime","dkg_test_orchestrator","pallet_bridge_registry","pallet_dkg_metadata","pallet_dkg_proposal_handler","pallet_dkg_proposals","webb_relayer_gadget","webb_relayer_gadget_cli"];

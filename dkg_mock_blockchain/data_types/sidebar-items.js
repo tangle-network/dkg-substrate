@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AttachedCommand","MockBlockchainEvent","MockClientResponse","TestCase"],"fn":["deserialize_peer_id","serialize_peer_id"],"struct":["AttachedCommandMetadata","XtDummy"],"trait":["BlockTraitForTest"],"type":["TestBlock"]};

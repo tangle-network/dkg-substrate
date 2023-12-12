@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DKG_KEYGEN_PROTOCOL_NAME","DKG_SIGNING_PROTOCOL_NAME"],"mod":["keygen_manager","network","signing_manager","worker"]};

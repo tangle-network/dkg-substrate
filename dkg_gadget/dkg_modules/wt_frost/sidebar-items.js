@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["FrostMessage"],"fn":["create_signer_key_ids","generate_party_key_ids","run_dkg","run_signing","validate_parameters"],"struct":["WTFrostDKG"],"trait":["NetInterface"]};
