@@ -37,6 +37,7 @@ sp-core = { workspace = true }
 sp-io = { workspace = true }
 sp-staking = { workspace = true }
 sp-keystore = { workspace = true }
+sp-state-machine = { workspace = true }
 k256 = { version = "0.11.5", default-features = false, features = ["arithmetic", "ecdsa"] }
 
 [features]
@@ -46,6 +47,8 @@ std = [
 	"codec/std",
 	"hex/std",
 	"scale-info/std",
+	"sp-io/std",
+	"sp-runtime/std",
 	"sp-std/std",
 	"log/std",
 	"sp-runtime/std",

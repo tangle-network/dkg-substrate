@@ -31,7 +31,7 @@ use frame_election_provider_support::{
 
 use frame_election_provider_support::{onchain, SequentialPhragmen, VoteWeight};
 use frame_support::{
-	traits::{ConstBool, ConstU16, ConstU32, Everything},
+	traits::{ConstBool, ConstU32, Everything},
 	weights::{constants::WEIGHT_REF_TIME_PER_SECOND, ConstantMultiplier},
 };
 #[cfg(any(feature = "std", test))]

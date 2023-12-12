@@ -17,9 +17,8 @@ use super::mock::DKGProposalHandler;
 use crate::{mock::*, Error, SignedProposalBatchOf};
 use codec::Encode;
 use dkg_runtime_primitives::{
-	keccak_256, offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, utils::ecdsa,
-	AggregatedPublicKeys, MaxProposalLength, MisbehaviourType, ProposalHandlerTrait,
-	ProposalHeader, TransactionV2, TypedChainId, KEY_TYPE,
+	keccak_256, offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, utils::ecdsa, MaxProposalLength,
+	ProposalHandlerTrait, ProposalHeader, TransactionV2, TypedChainId, KEY_TYPE,
 };
 use frame_support::{
 	assert_err, assert_noop, assert_ok,
@@ -33,7 +32,6 @@ use sp_io::crypto::{ecdsa_generate, ecdsa_sign_prehashed};
 use sp_runtime::{
 	app_crypto::ecdsa::Public,
 	offchain::storage::{MutateStorageError, StorageRetrievalError, StorageValueRef},
-	RuntimeAppPublic,
 };
 use sp_std::vec::Vec;
 use webb_proposals::{Proposal, ProposalKind};
@@ -56,10 +54,10 @@ pub fn mock_signed_refresh_proposal_batch(
 	let data_ser = data_to_sign.data();
 
 	let hash = keccak_256(&data_ser);
-	let sig = mock_sign_msg(&hash).unwrap().unwrap();
+	let _sig = mock_sign_msg(&hash).unwrap().unwrap();
 
-	let mut sig_vec: Vec<u8> = Vec::new();
-	let signature = ecdsa_sign_prehashed(KEY_TYPE, &pub_key, &hash).unwrap();
+	let sig_vec: Vec<u8> = Vec::new();
+	let _signature = ecdsa_sign_prehashed(KEY_TYPE, &pub_key, &hash).unwrap();
 
 	SignedProposalBatchOf::<Test> {
 		proposals: vec![unsigned_proposal].try_into().unwrap(),
