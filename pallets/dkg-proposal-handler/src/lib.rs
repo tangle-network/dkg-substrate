@@ -462,14 +462,10 @@ pub mod pallet {
 				let data = prop_batch.data();
 
 				// check the signature is valid
-				let _result = ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(
+				let result = ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(
 					&prop_batch.signature,
 					&data,
 				);
-
-				// Accept all signatures to make testing easier
-				#[cfg(test)]
-				let result: Result<(), dkg_runtime_primitives::utils::SignatureError> = Ok(());
 
 				match result {
 					Ok(_) => {

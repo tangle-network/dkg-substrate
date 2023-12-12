@@ -15,7 +15,7 @@
 // construct_runtime requires this
 #![allow(clippy::from_over_into, clippy::unwrap_used)]
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::{construct_runtime, parameter_types, BasicExternalities};
+use frame_support::{construct_runtime, parameter_types};
 use frame_system::EnsureRoot;
 use sp_core::{
 	sr25519::{self, Signature},
@@ -33,6 +33,7 @@ use sp_runtime::{
 	},
 	BuildStorage, Percent, Permill,
 };
+use sp_state_machine::BasicExternalities;
 use std::{sync::Arc, vec};
 
 use crate as pallet_dkg_metadata;
