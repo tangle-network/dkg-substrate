@@ -12,29 +12,59 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// Bridge proposals
+/// Governor proposals
 pub mod refresh;
-pub mod resource_id_update;
-
-/// Anchor proposals
-pub mod anchor_update;
-pub mod set_verifier;
-
-/// Token update proposals
-pub mod add_token_to_set;
-pub mod fee_update;
-pub mod remove_token_from_set;
-
-/// Treasury Proposals
-pub mod fee_recipient_update;
-pub mod set_treasury_handler;
-
-/// Rescue tokens
-pub mod rescue_tokens;
-
-/// fees & limits
-pub mod max_deposit_limit_update;
-pub mod min_withdrawal_limit_update;
 
 /// EVM tx
 pub mod evm_tx;
+
+use webb_proposals::evm::*;
+
+/// Macro for creating modules with proposal creation functions
+macro_rules! proposal_module {
+	($mod_name:ident, $proposal_type:ty, $proposal_length:expr) => {
+		pub mod $mod_name {
+			use super::*;
+			use crate::handlers::validate_proposals::ValidationError;
+			use codec::alloc::string::ToString;
+			use webb_proposals::from_slice;
+
+			pub fn create(data: &[u8]) -> Result<$proposal_type, ValidationError> {
+				let bytes: [u8; $proposal_length] =
+					data.try_into().map_err(|_| ValidationError::InvalidProposalBytesLength)?;
+				from_slice::<$proposal_type>(&bytes).map_err(|e| {
+					log::error!("Error while decoding proposal: {:?}", e);
+					ValidationError::InvalidDecoding(e.to_string())
+				})
+			}
+		}
+	};
+}
+
+proposal_module!(add_token_to_set, TokenAddProposal, TokenAddProposal::LENGTH);
+proposal_module!(remove_token_from_set, TokenRemoveProposal, TokenRemoveProposal::LENGTH);
+proposal_module!(fee_update, WrappingFeeUpdateProposal, WrappingFeeUpdateProposal::LENGTH);
+proposal_module!(
+	fee_recipient_update,
+	FeeRecipientUpdateProposal,
+	FeeRecipientUpdateProposal::LENGTH
+);
+proposal_module!(
+	max_deposit_limit_update,
+	MaxDepositLimitProposal,
+	MaxDepositLimitProposal::LENGTH
+);
+proposal_module!(
+	min_withdrawal_limit_update,
+	MinWithdrawalLimitProposal,
+	MinWithdrawalLimitProposal::LENGTH
+);
+proposal_module!(rescue_tokens, RescueTokensProposal, RescueTokensProposal::LENGTH);
+proposal_module!(anchor_update, AnchorUpdateProposal, AnchorUpdateProposal::LENGTH);
+proposal_module!(resource_id_update, ResourceIdUpdateProposal, ResourceIdUpdateProposal::LENGTH);
+proposal_module!(
+	set_treasury_handler,
+	SetTreasuryHandlerProposal,
+	SetTreasuryHandlerProposal::LENGTH
+);
+proposal_module!(set_verifier, SetVerifierProposal, SetVerifierProposal::LENGTH);

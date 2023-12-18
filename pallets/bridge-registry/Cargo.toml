@@ -21,7 +21,7 @@ sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 serde = { workspace = true }
 hex = { workspace = true }
-
+log = { workspace = true }
 dkg-runtime-primitives = { workspace = true, default-features = false }
 frame-benchmarking = { workspace = true, optional = true }
 pallet-identity = { workspace = true }

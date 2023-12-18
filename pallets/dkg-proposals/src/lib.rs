@@ -107,6 +107,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 
+use core::fmt::Debug;
 use sp_runtime::{traits::Convert, RuntimeAppPublic};
 use sp_std::prelude::*;
 use types::{ProposalStatus, ProposalVotes};
@@ -130,10 +131,7 @@ pub mod pallet {
 		proposal::{Proposal, ProposalKind},
 		ProposalNonce,
 	};
-	use frame_support::{
-		dispatch::{fmt::Debug, DispatchResultWithPostInfo},
-		pallet_prelude::*,
-	};
+	use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*};
 	use frame_system::pallet_prelude::*;
 
 	pub type ProposalOf<T> = Proposal<<T as Config>::MaxProposalLength>;

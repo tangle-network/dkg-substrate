@@ -1023,7 +1023,7 @@ pub mod pallet {
 				<NextUnsignedAt<T>>::put(current_block + T::UnsignedInterval::get());
 				// Reset `RefreshInProgress` to false, so that we submit a new refresh.
 				RefreshInProgress::<T>::put(false);
-				frame_support::log::debug!(
+				log::debug!(
 					target: "runtime::dkg_metadata",
 					"Next DKG Public Key: {}, Authority Set ID: {}",
 					hex::encode(key),
@@ -1437,7 +1437,7 @@ pub mod pallet {
 			let current_block = <frame_system::Pallet<T>>::block_number();
 			let next_unsigned_at = <NextUnsignedAt<T>>::get();
 			if next_unsigned_at > current_block {
-				frame_support::log::debug!(
+				log::debug!(
 					target: "runtime::dkg_metadata",
 					"validate unsigned: early block: current: {:?}, next_unsigned_at: {:?}",
 					current_block,
@@ -1461,14 +1461,14 @@ pub mod pallet {
 					Call::submit_misbehaviour_reports { .. }
 			};
 			if !is_valid_call {
-				frame_support::log::warn!(
+				log::warn!(
 					target: "runtime::dkg_metadata",
 					"validate unsigned: invalid call: {:?}",
 					call,
 				);
 				InvalidTransaction::Call.into()
 			} else {
-				frame_support::log::debug!(
+				log::debug!(
 					target: "runtime::dkg_metadata",
 					"validate unsigned: valid call: {:?}",
 					call,
