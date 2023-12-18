@@ -208,6 +208,7 @@ pub fn run() -> sc_cli::Result<()> {
 			runner.run_node_until_exit(|config| async move {
 				service::new_full(service::RunFullParams {
 					config,
+					db_path: cli.db_path,
 					debug_output: cli.output_path,
 					relayer_cmd: cli.relayer_cmd,
 				})

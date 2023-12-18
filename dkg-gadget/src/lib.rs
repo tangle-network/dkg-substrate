@@ -11,9 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-use std::{marker::PhantomData, sync::Arc};
-
 use debug_logger::DebugLogger;
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi, MaxAuthorities, MaxProposalLength};
 use parking_lot::RwLock;
@@ -26,6 +23,11 @@ use sp_api::{NumberFor, ProvideRuntimeApi};
 use sp_blockchain::HeaderBackend;
 use sp_keystore::KeystorePtr;
 use sp_runtime::traits::Block;
+use std::{
+	marker::PhantomData,
+	path::{Path, PathBuf},
+	sync::Arc,
+};
 
 mod error;
 /// Stores keypairs for DKG
@@ -107,6 +109,8 @@ where
 	pub prometheus_registry: Option<Registry>,
 	/// For logging
 	pub debug_logger: DebugLogger,
+	/// database path
+	pub db_path: PathBuf,
 	/// Phantom block type
 	pub _block: PhantomData<B>,
 }
@@ -134,6 +138,7 @@ where
 		local_keystore,
 		_block,
 		debug_logger,
+		db_path,
 	} = dkg_params;
 
 	let dkg_keystore: DKGKeystore = DKGKeystore::new(key_store, debug_logger.clone());
@@ -180,13 +185,28 @@ where
 
 	// In memory backend, not used for now
 	// let db_backend = Arc::new(db::DKGInMemoryDb::new());
-	let offchain_db_backend = db::DKGOffchainStorageDb::new(
-		backend.clone(),
-		dkg_keystore.clone(),
-		local_keystore.clone(),
-		debug_logger.clone(),
-	);
-	let db_backend = Arc::new(offchain_db_backend);
+	// let offchain_db_backend = db::DKGOffchainStorageDb::new(
+	// 	backend.clone(),
+	// 	dkg_keystore.clone(),
+	// 	local_keystore.clone(),
+	// 	debug_logger.clone(),
+	// );
+
+	let path = Path::new("sqlite:///").join(db_path).join("frontier.db3");
+
+	let sql_backend = db::SqlBackend::new(
+		db::BackendConfig::Sqlite(db::SqliteBackendConfig {
+			path: path.to_str().unwrap(),
+			create_if_missing: true,
+			cache_size: 20480,
+			thread_count: 4,
+		}),
+		1,
+		None,
+	)
+	.unwrap();
+
+	let db_backend = Arc::new(sql_backend);
 	let worker_params = worker::WorkerParams {
 		latest_header,
 		client,

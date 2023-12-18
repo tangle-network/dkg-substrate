@@ -165,12 +165,13 @@ pub fn new_partial(
 pub struct RunFullParams {
 	pub config: Configuration,
 	pub debug_output: Option<std::path::PathBuf>,
+	pub db_path: std::path::PathBuf,
 	pub relayer_cmd: webb_relayer_gadget_cli::WebbRelayerCmd,
 }
 
 /// Builds a new service for a full client.
 pub fn new_full(
-	RunFullParams { config, debug_output, relayer_cmd }: RunFullParams,
+	RunFullParams { config, debug_output, db_path, relayer_cmd }: RunFullParams,
 ) -> Result<TaskManager, ServiceError> {
 	let sc_service::PartialComponents {
 		client,
@@ -274,6 +275,7 @@ pub fn new_full(
 			sync_service: sync_service.clone(),
 			prometheus_registry: prometheus_registry.clone(),
 			local_keystore: Some(keystore_container.local_keystore()),
+			db_path,
 			_block: std::marker::PhantomData::<Block>,
 			debug_logger,
 		};

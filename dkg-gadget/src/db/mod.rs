@@ -2,10 +2,12 @@ use dkg_primitives::{types::DKGError, SessionId};
 
 mod mem;
 mod offchain_storage;
+mod sql_storage;
 
 use crate::async_protocols::types::LocalKeyType;
 pub use mem::DKGInMemoryDb;
 pub use offchain_storage::DKGOffchainStorageDb;
+pub use sql_storage::{BackendConfig, SqlBackend, SqliteBackendConfig};
 
 /// A Database backend, specifically for the DKG to store and load important state
 ///
